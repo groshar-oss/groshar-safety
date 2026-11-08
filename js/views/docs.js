@@ -92,4 +92,15 @@ export function siteSign(site) {
     ${rows.join('')}
     </table></div>`, bar));
 }
+// מכתב רשמי מהודעה שאושרה (למשל קבלת אחריות כוללת לפי תקנה 6(ד))
+export function noticeLetter(site, n) {
+  const rows = (n.fields || []).map(([k, v]) => `<tr><th>${esc(k)}</th><td>${esc(v)}</td></tr>`).join('');
+  open(page(n.subject + ' · ' + site.name, `
+    <div class="head"><div><h1>${esc(n.subject)}</h1><div class="mut"><span class="dot"></span>${esc(fmtDate(new Date().toISOString()))}</div></div><img src="${LOGO()}" alt="צי הנדסה"></div>
+    <table>${rows}</table>
+    <p style="white-space:pre-line">${esc(n.body)}</p>
+    <div class="sig"><div>הקבלן המקבל את האחריות: שם, תפקיד, חתימה וחותמת</div><div>המזמין: שם, תפקיד וחתימה</div><div>תאריך</div><div>תאריך</div></div>
+    <p class="note">את המכתב החתום שולחים למפקח העבודה האזורי ומצרפים במערכת לחובה. המסמך הופק ממערכת ניהול הבטיחות של צי הנדסה ואינו חוות דעת משפטית.</p>`,
+    n.status !== 'sent' && n.status !== 'approved' ? '<p style="color:#c62828"><b>טיוטה: ההודעה עוד לא אושרה במערכת.</b></p>' : ''));
+}
 export { CAT, ROLES };

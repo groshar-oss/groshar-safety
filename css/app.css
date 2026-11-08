@@ -370,3 +370,8 @@ details summary{cursor:pointer;font-size:13px;font-weight:600;margin-top:8px}
 .brand span{padding-inline-start:4px}
 .mobile-top .mlogo{height:30px;width:auto}
 .kpi .v.info{color:var(--acc)}
+/* הודעה רשמית בחלון החובה */
+.card.notice{border-inline-start:4px solid var(--steel,#3D5A78);margin:12px 0;padding:14px}
+.card.notice h3{margin:0;font-size:15px}.card.notice .dh{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.notice .miss{color:#c62828;font-weight:600}.notice .nbody{white-space:pre-line;background:var(--bg2,rgba(127,127,127,.08));border-radius:8px;padding:10px;margin:8px 0}
+.notice .actions{display:flex;flex-wrap:wrap;gap:8px;margin-top:10px}

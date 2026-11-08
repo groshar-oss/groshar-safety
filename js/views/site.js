@@ -218,7 +218,9 @@ function tabLog(s) {
     ...checkinsFor(s.id).map(c => ({ at: c.at, kind: "צ'ק-אין והשגחה באתר", who: `${c.person_name}${c.role === 'rep' ? ' · נציג מבצע הבנייה, מטעם מבצע הבנייה' : ' · ' + (ROLES[c.role] || '')}${c.backup ? ' (ממלא מקום)' : ''}`,
       text: [c.note, ...Object.values(c.checks || {}).map(k => `${k.title}: ${k.ok ? 'תקין' : 'ליקויים. ' + k.note}`)].filter(Boolean).join('\n'), geo: c.lat ? `${c.lat}, ${c.lng}` : '' })),
     ...S.data.duties.filter(d => d.site_id === s.id && d.status === 'done' && d.key !== 'daily_checkin').map(d => ({ at: d.done_at, kind: d.title, who: d.done_by || '', text: [d.evidence_note, d.evidence_ref].filter(Boolean).join(' · '), ref: d.ref })),
-    ...S.data.events.filter(e => e.site_id === s.id).map(e => ({ at: e.occurred_at, kind: 'אירוע: ' + (EVENTS[e.type]?.label || e.type), who: e.reported_by || '', text: e.description || '' }))
+    ...S.data.events.filter(e => e.site_id === s.id).map(e => ({ at: e.occurred_at, kind: 'אירוע: ' + (EVENTS[e.type]?.label || e.type), who: e.reported_by || '', text: e.description || '' })),
+    ...(S.data.notices || []).filter(n => n.site_id === s.id && n.status === 'sent').map(n => ({ at: n.sent_at, kind: 'הודעה רשמית: ' + n.title, who: `${n.sent_by || ''} · אושרה בידי ${n.approved_by || ''}`,
+      text: [n.channel === 'email' ? 'אל: ' + (n.to_list || []).map(p => p.name).join(', ') : '', n.sent_ref ? 'אסמכתה: ' + n.sent_ref : '', n.channel === 'gov' ? (n.fields || []).map(([k, v]) => k + ': ' + (v || '')).join('\n') : n.body].filter(Boolean).join('\n') }))
   ].sort((a, b) => String(b.at).localeCompare(String(a.at)));
   const el = h(`<div class="card"><div class="dh"><h2>פנקס כללי</h2><button class="btn small ghost" data-print>הדפסה</button></div>
     <p class="small mut">כל רישום שהתקנות מחייבות: צ'ק-אין יומי וביקורות היום, בדיקות, מינויים, דיווחים ואירועים. רישום של נציג מבצע הבנייה מסומן "מטעם מבצע הבנייה". המזמין רואה את הפנקס. אין מחיקה ואין עריכה. עדיין צריך פנקס כללי מודפס באתר, כי לא נבדק אם מותר להחזיק פנקס דיגיטלי בלבד.</p>

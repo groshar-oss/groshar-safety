@@ -5,6 +5,9 @@ import { CAT, LEVELS, ROLES, level, leftText, recipients, gateStatus, EVENTS } f
 import { messageText, waLink, waShare, mailtoLink, logNotification, notifsFor } from '../alerts.js';
 import { esc, h, $, $$, modal, toast, field, area, fmtDate } from '../util.js';
 import { checkinForm } from './checkin.js';
+import { NOTICES, GOV, CHANNEL, NST, noticeFor, needsApproval, ensureDraft, saveNotice, fieldsText, emptyFields } from '../notices.js';
+import { gReady, gmailSend, isEmail } from '../google.js';
+import { noticeLetter } from './docs.js';
 
 export const fmtDT = t => t ? new Date(t).toLocaleString('he-IL', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' }) : '';
 export const chip = lv => `<span class="chip lv-${lv} ${LEVELS[lv].chip}">${LEVELS[lv].label}</span>`;
@@ -31,7 +34,7 @@ export function dutyCard(i, { showSite = false } = {}) {
   const r = recipients(i, site, S.data.site_people);
   const lv = r.level;
   return `<a class="duty lv-${lv}" href="#/site/${i.site_id}/duties/${i.id}">
-    <div class="dh">${chip(lv)}${i.critical ? '<span class="chip red">חובה קריטית</span>' : ''}<span class="chip">${sideName(i.side)}</span>${showSite ? `<span class="chip violet">${esc(site?.name || '')}</span>` : ''}</div>
+    <div class="dh">${chip(lv)}${i.critical ? '<span class="chip red">חובה קריטית</span>' : ''}<span class="chip">${sideName(i.side)}</span>${showSite ? `<span class="chip violet">${esc(site?.name || '')}</span>` : ''}${needsApproval(i) ? '<span class="chip amber">הודעה ממתינה לאישור</span>' : ''}</div>
     <div class="dt">${esc(i.title)}</div>
     <div class="dm">${i.status === 'open' ? esc(leftText(i)) + (i.due_at ? ' · ' + fmtDT(i.due_at) : '') : i.status === 'done' ? 'בוצע ' + fmtDate(i.done_at) : i.status === 'waived' ? 'נסגר בדחייה מוצדקת' : 'לא חל'}
       · אחראי: ${esc(r.roles.map(x => ROLES[x]).join(', '))}</div>
@@ -78,6 +81,8 @@ export async function openDuty(id) {
   const hist = notifsFor(i.id);
   const act = i.status === 'open' && canAct(i), waive = i.status === 'open' && canWaive(i);
   const isGate = i.key === 'dev_start_approval', gate = gateStatus(S.data.duties.filter(d => d.site_id === i.site_id));
+  if (NOTICES[i.key] && i.status === 'open' && act) { try { await ensureDraft(site, i); } catch (e) { console.warn('notice', e); } }
+  const nt = NOTICES[i.key] ? noticeFor(i) : null;
   const body = `<div class="dd">
     <div class="dh">${chip(x.level)}${i.critical ? '<span class="chip red">חובה קריטית</span>' : ''}<span class="chip">${sideName(i.side)}</span><span class="chip violet">${esc(site.name)}</span></div>
     <p class="ref"><b>§</b> ${esc(i.ref)}</p>
@@ -91,6 +96,7 @@ export async function openDuty(id) {
         <span>ראיה / נימוק</span><b>${esc([i.evidence_note, i.evidence_ref, i.na_reason].filter(Boolean).join(' · '))}${i.file_path ? ' · <button type="button" class="btn link" data-file>קובץ מצורף</button>' : ''}</b>` : ''}</div>
     ${x.note ? `<div class="note">${esc(x.note)}</div>` : ''}
     ${isGate && i.status === 'open' ? `<div class="card gate"><h3>שער התחלת עבודה</h3>${gate.items.map(g => `<div class="gi ${g.status === 'open' ? 'no' : 'yes'}">${g.status === 'open' ? '✗' : '✓'} ${esc(g.title)}</div>`).join('')}</div>` : ''}
+    ${nt ? noticeBlock(nt, act || canAct(i)) : ''}
     ${i.status === 'open' ? sendBlock(x) : ''}
     ${hist.length ? `<details><summary>היסטוריית שליחה (${hist.length})</summary>${hist.map(n => `<div class="small">${fmtDT(n.sent_at)} · ${CH[n.channel] || n.channel} · ${esc(n.recipient_name)} · ${esc(ST[n.status] || n.status)} · ${esc(LEVELS[n.level]?.label || '')}</div>`).join('')}</details>` : ''}
   </div>`;
@@ -103,10 +109,91 @@ export async function openDuty(id) {
   const close = () => { el.remove(); const [, r, a, b, c2] = location.hash.split('/'); if (r === 'site' && c2) location.hash = `#/site/${a}/${b}`; };
   $$('[data-x]', el).forEach(b => b.onclick = close);
   wireSend(el, x);
+  if (nt) wireNotice(el, nt, i, site, x, () => { el.remove(); openDuty(i.id); }, close);
   $('[data-file]', el)?.addEventListener('click', () => openFile(i.file_path));
   $('[data-done]', el)?.addEventListener('click', async () => { close(); if (i.key === 'daily_checkin') await checkinForm(i.site_id, i); else await completeDuty(i); });
   $('[data-na]', el)?.addEventListener('click', async () => { close(); await closeDuty(i, 'na'); });
   $('[data-waive]', el)?.addEventListener('click', async () => { close(); await closeDuty(i, 'waived'); });
+}
+
+// ===== הודעה רשמית: טיוטה, אישור, שליחה =====
+function noticeBlock(n, can) {
+  const g = n.channel === 'gov' ? GOV[NOTICES[n.key]?.gov] : null;
+  const miss = '<span class="miss">חסר</span>';
+  const fields = (n.fields || []).length ? `<div class="kv nf">${n.fields.map(([k, v], ix) => `<span>${esc(k)}</span><b>${String(v || '').trim() ? esc(v) : miss}${n.status === 'approved' && n.channel === 'gov' && v ? ` <button type="button" class="btn link" data-n-cp="${ix}">העתקה</button>` : ''}</b>`).join('')}</div>` : '';
+  const to = n.channel === 'email' ? `<div class="small"><b>אל:</b> ${n.to_list?.length ? n.to_list.map(p => esc(p.name) + ' &lt;' + esc(p.email) + '&gt;').join(', ') : '<span class="miss">אין נמענים עם מייל. מוסיפים מייל בלשונית "בעלי תפקידים" או בעריכה.</span>'}</div>` : '';
+  let actions = '';
+  if (can && n.status === 'draft') actions = '<button type="button" class="btn small ghost" data-n-edit>עריכה</button><button type="button" class="btn small" data-n-approve>אישור ההודעה</button>';
+  if (can && n.status === 'approved') {
+    if (n.channel === 'gov') actions = `${g?.form ? `<a class="btn small" href="${esc(g.form)}" target="_blank" rel="noopener" data-n-open>פתיחת הטופס המקוון</a>` : ''}<a class="btn small ghost" href="${esc(g?.info || '')}" target="_blank" rel="noopener">דף השירות</a>
+      ${g?.decl ? `<a class="btn small ghost" href="${esc(g.decl)}" target="_blank" rel="noopener">התצהיר להחתמה</a>` : ''}<button type="button" class="btn small ghost" data-n-copy>העתקת כל השדות</button><button type="button" class="btn small" data-n-sent>סימון כהוגש</button>`;
+    if (n.channel === 'email') actions = `<button type="button" class="btn small" data-n-send>שליחה עכשיו</button><button type="button" class="btn small ghost" data-n-mailto>פתיחה בתוכנת המייל</button><button type="button" class="btn small ghost" data-n-sent>סימון כנשלח</button>`;
+    if (n.channel === 'letter') actions = '<button type="button" class="btn small" data-n-letter>הפקת המכתב (PDF)</button><button type="button" class="btn small ghost" data-n-sent>סימון כנשלח</button>';
+    actions += '<button type="button" class="btn small ghost" data-n-back>חזרה לעריכה</button>';
+  }
+  if (n.channel === 'letter' && n.status !== 'approved') actions += '<button type="button" class="btn small ghost" data-n-letter>תצוגת המכתב</button>';
+  return `<div class="card notice"><div class="dh"><h3>ההודעה הרשמית</h3><span class="chip ${n.status === 'sent' ? 'green' : n.status === 'approved' ? 'blue' : 'amber'}">${NST[n.status]}</span><span class="chip">${CHANNEL[n.channel]}${g ? ': ' + esc(g.label) : ''}</span></div>
+    <p class="small mut">${n.status === 'draft' ? 'המערכת הכינה טיוטה מנתוני האתר ומבעלי התפקידים. בודקים, משלימים מה שחסר ומאשרים. שום דבר לא נשלח לפני האישור.' : n.status === 'approved' ? `אושרה בידי ${esc(n.approved_by || '')} · ${fmtDT(n.approved_at)}.${n.channel === 'gov' ? ' למשרד העבודה אין ממשק שליחה אוטומטית: פותחים את הטופס, מעתיקים את השדות ומגישים. אחר כך מסמנים "הוגש" עם מספר האישור.' : ''}` : `נשלחה ${fmtDT(n.sent_at)} · ${esc(n.sent_by || '')}${n.sent_ref ? ' · אסמכתה: ' + esc(n.sent_ref) : ''}`}</p>
+    ${g?.tip && n.status !== 'sent' ? `<p class="small">${esc(g.tip)}</p>` : ''}
+    ${to}${n.channel !== 'gov' ? `<div class="small"><b>נושא:</b> ${esc(n.subject)}</div>` : ''}
+    ${fields}${n.body ? `<div class="small pre nbody">${esc(n.body)}</div>` : ''}
+    ${actions ? `<div class="actions">${actions}</div>` : ''}</div>`;
+}
+
+function wireNotice(el, n, i, site, x, reopen, close) {
+  const who = () => window.__actor || S.user?.email || '';
+  const on = (sel, fn) => $(sel, el)?.addEventListener('click', async e => { try { await fn(e); } catch (er) { toast(er.message, 'bad'); } });
+  const copy = async t => { try { await navigator.clipboard.writeText(t); toast('הועתק'); } catch { toast('ההעתקה נכשלה', 'bad'); } };
+  $$('[data-n-cp]', el).forEach(b => b.onclick = () => copy(String(n.fields[+b.dataset.nCp][1] || '')));
+  on('[data-n-copy]', () => copy(fieldsText(n)));
+  on('[data-n-letter]', () => noticeLetter(site, n));
+  on('[data-n-back]', async () => { await saveNotice(n, { status: 'draft', approved_by: null, approved_at: null }); reopen(); });
+  on('[data-n-edit]', async () => {
+    el.remove();
+    const v = await modal({ title: 'עריכת ההודעה', ok: 'שמירת הטיוטה', wide: true,
+      body: `${n.channel === 'email' ? field('נמענים (מיילים מופרדים בפסיק)', 'to', (n.to_list || []).map(p => p.email).join(', ')) : ''}
+        ${n.channel !== 'gov' ? field('נושא', 'subject', n.subject || '') : ''}
+        ${(n.fields || []).map(([k, val], ix) => area(k, 'f' + ix, val || '')).join('')}
+        ${n.channel !== 'gov' ? area('נוסח ההודעה', 'body', n.body || '') : ''}`,
+      validate: d => n.channel === 'email' && String(d.to || '').split(/[,;\s]+/).filter(Boolean).some(e => !isEmail(e)) ? 'יש כתובת מייל לא תקינה' : null });
+    if (v) {
+      const patch = { fields: (n.fields || []).map(([k], ix) => [k, String(v['f' + ix] ?? '').trim()]) };
+      if (n.channel !== 'gov') { patch.subject = v.subject.trim(); patch.body = v.body; }
+      if (n.channel === 'email') patch.to_list = String(v.to || '').split(/[,;\s]+/).filter(Boolean).map(e => { const p = S.data.site_people.find(q => q.site_id === site.id && (q.email || '').toLowerCase() === e.toLowerCase()); return { name: p?.name || e, email: e, role: p?.role || '' }; });
+      await saveNotice(n, patch); toast('הטיוטה נשמרה');
+    }
+    openDuty(i.id);
+  });
+  on('[data-n-approve]', async () => {
+    const miss = emptyFields(n);
+    if (n.channel === 'email' && !n.to_list?.length) return toast('אין נמענים. מוסיפים בעריכה.', 'bad');
+    if (miss.length) { el.remove(); const ok = await modal({ title: 'יש שדות ריקים', ok: 'לאשר בכל זאת', body: `<p>השדות האלה ריקים: <b>${esc(miss.join(', '))}</b>.</p><p class="small mut">אפשר לחזור לעריכה ולהשלים, או לאשר ולהשלים ישירות בטופס.</p>` }); if (!ok) return openDuty(i.id); }
+    await saveNotice(n, { status: 'approved', approved_by: who(), approved_at: new Date().toISOString() });
+    toast('ההודעה אושרה'); reopen();
+  });
+  on('[data-n-mailto]', () => { window.location.href = mailtoLink((n.to_list || []).map(p => p.email), n.subject, n.body); });
+  on('[data-n-send]', async e => {
+    if (!gReady()) return toast('כדי לשלוח מהמערכת צריך לחבר את Gmail במסך "הגדרות". אפשר גם "פתיחה בתוכנת המייל".', 'bad');
+    e.target.disabled = true;
+    const html = `<div dir="rtl" style="font-family:Arial,sans-serif;font-size:14px;white-space:pre-line">${esc(n.body)}</div><p style="color:#666;font-size:12px">נשלח ממערכת ניהול הבטיחות של צי הנדסה.</p>`;
+    await gmailSend({ to: n.to_list.map(p => p.email), subject: n.subject, html });
+    for (const p of n.to_list) await logNotification(i, x.level, p, 'email', 'sent');
+    await markSent(n, i, 'נשלח במייל אל ' + n.to_list.map(p => p.name).join(', '), '');
+  });
+  on('[data-n-sent]', async () => {
+    el.remove();
+    const v = await modal({ title: n.channel === 'gov' ? 'סימון ההודעה כהוגשה' : 'סימון ההודעה כנשלחה', ok: 'שמירה',
+      body: `${field(n.channel === 'gov' ? 'מספר אישור ההגשה' : 'אסמכתה (מספר מכתב, דואר רשום)', 'ref', '')}${area('הערה', 'note', '')}`,
+      validate: d => n.channel === 'gov' && !d.ref?.trim() ? 'צריך את מספר אישור ההגשה שהטופס מחזיר' : null });
+    if (!v) return openDuty(i.id);
+    await markSent(n, i, (n.channel === 'gov' ? 'הוגש בטופס המקוון' : 'נשלח מכתב') + (v.note?.trim() ? '. ' + v.note.trim() : ''), v.ref.trim());
+  });
+  async function markSent(nn, duty, note, ref) {
+    await saveNotice(nn, { status: 'sent', sent_at: new Date().toISOString(), sent_by: who(), sent_ref: ref || null });
+    toast('ההודעה נרשמה כנשלחה'); close();
+    if (duty.status === 'open' && canAct(duty)) await completeDuty(duty, { note: `${nn.title}: ${note}`, ref: ref || 'הודעה ' + fmtDT(new Date().toISOString()) });
+    else render();
+  }
 }
 
 async function openFile(path) {
@@ -114,7 +201,7 @@ async function openFile(path) {
 }
 
 // ביצוע: חובה ראיה (קובץ או מספר אסמכתה) ותיאור
-async function completeDuty(i) {
+async function completeDuty(i, pre = {}) {
   const c = CAT[i.key] || {};
   const isVisit = i.key === 'bakar_visit' || i.key.startsWith('bakar_stage_');
   const now = new Date(); const local = new Date(now - now.getTimezoneOffset() * 6e4).toISOString().slice(0, 16);
@@ -122,8 +209,8 @@ async function completeDuty(i) {
   const v = await modal({ title: i.key === 'dev_start_approval' ? 'אישור בכתב להתחלת עבודה' : 'סימון כבוצע', ok: 'שמירה',
     body: `<p class="small mut">${esc(i.title)}</p>
       ${field(isVisit ? 'מועד הביקור' : 'מועד הביצוע', 'at', local, { type: 'datetime-local', req: true })}
-      ${area('תיאור הביצוע', 'note', i.key === 'dev_start_approval' ? 'אני מאשר/ת בכתב להתחיל בעבודות הבנייה. כל תנאי תקנה 1א(א) התקיימו.' : '')}
-      ${field('מספר אסמכתה (אישור הגשה, מספר מסמך)', 'ref', '')}
+      ${area('תיאור הביצוע', 'note', pre.note || (i.key === 'dev_start_approval' ? 'אני מאשר/ת בכתב להתחיל בעבודות הבנייה. כל תנאי תקנה 1א(א) התקיימו.' : ''))}
+      ${field('מספר אסמכתה (אישור הגשה, מספר מסמך)', 'ref', pre.ref || '')}
       <label class="fld"><span>קובץ ראיה (PDF, תמונה, מסמך)</span><input type="file" name="file" accept="image/*,application/pdf,.doc,.docx,.xlsx"></label>
       <small class="mut">${c.evidence ? 'ראיה נדרשת: ' + esc(c.evidence) + '. ' : ''}צריך לצרף קובץ או מספר אסמכתה.</small>`,
     validate: (d, form) => { picked = form.file.files[0] || null; if (!d.note?.trim()) return 'צריך לתאר מה בוצע'; if (!d.ref?.trim() && !form.file.files[0]) return 'צריך לצרף קובץ או מספר אסמכתה'; if (new Date(d.at) > new Date(Date.now() + 6e4)) return 'מועד הביצוע לא יכול להיות בעתיד'; return null; },

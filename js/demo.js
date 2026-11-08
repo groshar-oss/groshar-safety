@@ -5,7 +5,7 @@ export function demoData(uuid) {
   const now = Date.now(), D = 864e5, H = 36e5;
   const day = k => new Date(now + k * D).toISOString().slice(0, 10);
   const at = k => new Date(now + k * H).toISOString();
-  const T = { orgs: [], memberships: [], sites: [], site_orgs: [], site_people: [], duties: [], events: [], notifications: [], files: [], audit_log: [], checkins: [] };
+  const T = { orgs: [], memberships: [], sites: [], site_orgs: [], site_people: [], duties: [], events: [], notifications: [], files: [], audit_log: [], checkins: [], notices: [] };
   const org = (name, kind, reg) => { const o = { id: uuid(), name, kind, reg_no: reg, demo: true, created_at: at(-24 * 60) }; T.orgs.push(o); return o; };
   const dev = org('אופק יזמות והשקעות בע"מ (דמו)', 'developer', '515000001');
   const con1 = org('א.ב. בנייה והנדסה בע"מ (דמו)', 'contractor', '515000002');
