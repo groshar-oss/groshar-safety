@@ -45,7 +45,7 @@ export function demoData(uuid) {
       const c = { id: uuid(), site_id: s.id, duty_id: i.id, day: i.seq, person_id: p?.id, person_name: who, role: p?.role || 'wm', backup: !!p?.backup, at: new Date(t).toISOString(),
         lat: null, lng: null, accuracy: null, checks: Object.fromEntries(Object.entries(checks).map(([k, title]) => [k, { ok: true, note: '', title }])), note: 'עבודות לפי לוח הזמנים (דמו)', by: who, created_at: new Date(t).toISOString() };
       T.checkins.push(c);
-      Object.assign(i, { status: 'done', done_at: c.at, closed_at: c.at, done_by: who + (p?.role === 'rep' ? ' (נציג מבצע הבנייה, מטעם מבצע הבנייה)' : ''), evidence_note: 'נוכחות והשגחה באתר (דמו)', evidence_ref: "צ'ק-אין" });
+      Object.assign(i, { status: 'done', done_at: c.at, closed_at: c.at, done_by: p?.role === 'rep' ? who.replace(/ \(.*\)$/, '') + ' (נציג מבצע הבנייה, מטעם מבצע הבנייה)' : who, evidence_note: 'נוכחות והשגחה באתר (דמו)', evidence_ref: "צ'ק-אין" });
     }
   };
 
