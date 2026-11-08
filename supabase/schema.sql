@@ -379,3 +379,12 @@ grant execute on function claim_service_admin() to authenticated;
 grant usage on schema public to authenticated;
 grant select, insert, update, delete on all tables in schema public to authenticated;
 revoke all on all tables in schema public from anon;
+
+-- הקשחה: search_path קבוע, ופונקציות ההרשאה לא נגישות למי שלא מחובר
+alter function my_email() set search_path = public;
+alter function role_side(text) set search_path = public;
+alter function no_delete() set search_path = public;
+alter function no_update() set search_path = public;
+revoke execute on function audit_row(), check_role_conflict(), handle_new_user(), claim_service_admin(), can_see_site(uuid), has_site_role(uuid, text[]), is_developer_member(), is_service_admin(), my_site_roles(uuid) from public, anon;
+revoke execute on function audit_row(), check_role_conflict(), handle_new_user() from authenticated;
+grant execute on function claim_service_admin(), can_see_site(uuid), has_site_role(uuid, text[]), is_developer_member(), is_service_admin(), my_site_roles(uuid) to authenticated;
