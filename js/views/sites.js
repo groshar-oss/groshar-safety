@@ -91,7 +91,8 @@ export function viewNewSite(siteId) {
   el.addEventListener('mounted', refresh);
   form.onsubmit = async e => {
     e.preventDefault();
-    const r = read(), err = m => { const x = $('#werr', el); x.textContent = m; x.hidden = !m; };
+    const err = m => { const x = $('#werr', el); x.textContent = m; x.hidden = !m; if (m) { toast(m, 'bad'); x.scrollIntoView({ block: 'center', behavior: 'smooth' }); } };
+    let r; try { r = read(); } catch (x) { return err('שגיאה בקריאת הטופס: ' + x.message); }
     if (!r.name) return err('צריך שם לאתר');
     if (!r.profile.start_date) return err('צריך מועד התחלה');
     if (r.cons.length > 1 && r.profile.contractors < r.cons.length) r.profile.contractors = r.cons.length;
