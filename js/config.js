@@ -8,6 +8,6 @@ export const CONFIG = {
   googleClientId: '',
   appName: 'צי הנדסה · ניהול בטיחות באתר',
   // כתובת השולח בכל המיילים שהמערכת שולחת דרך Gmail. חייבת להיות מוגדרת ב-Gmail תחת "שליחת דואר בשם". ריק = כתובת ה-Gmail המחוברת
-  mailFromName: '',
-  mailFromEmail: ''
+  mailFromName: 'צמח בן גדליה | צי הנדסה',
+  mailFromEmail: 'Tzemach@tzi-eng.co.il'
 };
