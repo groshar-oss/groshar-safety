@@ -8,7 +8,7 @@ const K = 'safety-google';
 const SCOPE = 'https://www.googleapis.com/auth/gmail.send';
 const DAPI = 'https://www.googleapis.com/drive/v3/', DUP = 'https://www.googleapis.com/upload/drive/v3/', FOLDER = 'application/vnd.google-apps.folder';
 
-export const gconf = () => ({ clientId: CONFIG.googleClientId || '', rootName: 'גרושר - בטיחות', enabled: false, folders: {}, lastSync: 0, lastErr: '',
+export const gconf = () => ({ clientId: CONFIG.googleClientId || '', rootName: 'צי הנדסה - בטיחות', enabled: false, folders: {}, lastSync: 0, lastErr: '',
   fromName: CONFIG.mailFromName || '', fromEmail: CONFIG.mailFromEmail || '', replyTo: '', bccSelf: false, ...(store(K) || {}) });
 const save = c => store(K, c);
 export function setGconf(patch) { const c = { ...gconf(), ...patch }; save(c); return c; }

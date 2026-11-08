@@ -33,7 +33,7 @@ export function viewSettings() {
       <h3 style="margin:14px 0 4px">כתובת השולח במיילים</h3>
       <p class="small mut">המיילים ממשיכים לצאת ישירות מהמערכת דרך Gmail. כאן קובעים מה יראה הנמען בשורת השולח. הכתובת חייבת להיות מוגדרת קודם ב-Gmail תחת "שליחת דואר בשם", אחרת Gmail ישלח מכתובת ה-Gmail עצמה.</p>
       <div class="grid g2">
-        ${field('שם השולח', 'fromName', g.fromName, { attrs: 'maxlength="80" placeholder="יונתן גרושר | גרושר פרויקטים"' })}
+        ${field('שם השולח', 'fromName', g.fromName, { attrs: 'maxlength="80" placeholder="יונתן גרושר | צי הנדסה"' })}
         ${field('כתובת השולח (ריק = כתובת ה-Gmail)', 'fromEmail', g.fromEmail, { type: 'email', attrs: 'dir="ltr" placeholder="Jonatan@groshar.co.il"' })}
         ${field('תשובות יגיעו אל (ריק = כתובת השולח)', 'replyTo', g.replyTo, { type: 'email', attrs: 'dir="ltr"' })}
         <label class="chk"><input type="checkbox" name="bccSelf"${g.bccSelf ? ' checked' : ''}> <span>עותק מוסתר של כל מייל לכתובת השולח</span></label>
@@ -64,7 +64,7 @@ export function viewSettings() {
   $('#gtest', el)?.addEventListener('click', async () => {
     const g = gconf(); const to = isEmail(g.fromEmail) ? g.fromEmail.trim() : prompt('לאיזו כתובת לשלוח את מייל הבדיקה?') || '';
     if (!isEmail(to)) return toast('אין כתובת לבדיקה', 'bad');
-    try { await gmailSend({ to, subject: 'מייל בדיקה · גרושר · ניהול בטיחות', html: `<p>זה מייל בדיקה מהמערכת.</p><p>אם בשורת השולח מופיע ${esc(g.fromEmail || 'כתובת ה-Gmail')}, ההגדרה עובדת. אם מופיעה כתובת ה-Gmail במקום, צריך להשלים ב-Gmail את "שליחת דואר בשם" (ראו חוברת ההתקנה).</p>` }); toast('מייל בדיקה נשלח ל-' + to); }
+    try { await gmailSend({ to, subject: 'מייל בדיקה · צי הנדסה · ניהול בטיחות', html: `<p>זה מייל בדיקה מהמערכת.</p><p>אם בשורת השולח מופיע ${esc(g.fromEmail || 'כתובת ה-Gmail')}, ההגדרה עובדת. אם מופיעה כתובת ה-Gmail במקום, צריך להשלים ב-Gmail את "שליחת דואר בשם" (ראו חוברת ההתקנה).</p>` }); toast('מייל בדיקה נשלח ל-' + to); }
     catch (e) { toast(e.message, 'bad'); }
   });
   $('#sendNow', el)?.addEventListener('click', async e => { e.target.disabled = true; try { const n = await autoEmail(); toast(`נשלחו ${n} מיילים`); } catch (x) { toast(x.message, 'bad'); } render(); });

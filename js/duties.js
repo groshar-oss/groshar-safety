@@ -345,7 +345,7 @@ export const LEVELS = {
   crit: { label: 'קריטי', color: '#7a0f0f', chip: 'red', rank: 5 },
   red: { label: 'חריגה', color: '#c62828', chip: 'red', rank: 4 },
   warn: { label: 'אזהרה', color: '#e08a00', chip: 'amber', rank: 3 },
-  info: { label: 'מידע', color: '#2f5bea', chip: 'blue', rank: 2 },
+  info: { label: 'מידע', color: '#3D5A78', chip: 'blue', rank: 2 },
   plan: { label: 'מתוכנן', color: '#8a93b0', chip: '', rank: 1 },
   ok: { label: 'בוצע', color: '#13804a', chip: 'green', rank: 0 },
   na: { label: 'לא חל', color: '#9aa1b5', chip: '', rank: 0 }

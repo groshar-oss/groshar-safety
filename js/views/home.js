@@ -45,7 +45,7 @@ export function viewHome() {
       <div class="kpi"><div class="l">קריטי</div><div class="v" style="color:#7a0f0f">${k('crit')}</div><div class="n">דורש פעולה מיידית</div></div>
       <div class="kpi"><div class="l">חריגות</div><div class="v neg">${k('red')}</div><div class="n">מועד שעבר</div></div>
       <div class="kpi"><div class="l">אזהרות</div><div class="v" style="color:#e08a00">${k('warn')}</div><div class="n">מועד מתקרב</div></div>
-      <div class="kpi"><div class="l">מידע</div><div class="v" style="color:#2f5bea">${k('info')}</div><div class="n">תזכורות</div></div>
+      <div class="kpi"><div class="l">מידע</div><div class="v" style="color:var(--acc)">${k('info')}</div><div class="n">תזכורות</div></div>
     </div>
     <div class="cols">
       <div>

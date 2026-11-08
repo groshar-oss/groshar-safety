@@ -96,9 +96,9 @@ export function emailHtml(items, title) {
     <td style="padding:6px;border-bottom:1px solid #ddd"><b>${esc(x.site.name)}</b><br>${esc(x.duty.title)}<br><small style="color:#666">${esc(x.duty.ref)}</small></td>
     <td style="padding:6px;border-bottom:1px solid #ddd;white-space:nowrap">${esc(leftText(x.duty))}</td>
     <td style="padding:6px;border-bottom:1px solid #ddd"><a href="${dutyUrl(x.duty)}">פתיחה</a></td></tr>`).join('');
-  return `<div dir="rtl" style="font-family:Arial,sans-serif;font-size:14px"><h2 style="color:#0f1f4b">${esc(title)}</h2>
+  return `<div dir="rtl" style="font-family:Arial,sans-serif;font-size:14px"><h2 style="color:#1C232C">${esc(title)}</h2>
     <table style="border-collapse:collapse;width:100%">${rows}</table>
-    <p style="color:#666;font-size:12px">נשלח ממערכת ניהול הבטיחות של גרושר פרויקטים. הפרטים המלאים מוצגים במערכת אחרי התחברות.</p></div>`;
+    <p style="color:#666;font-size:12px">נשלח ממערכת ניהול הבטיחות של צי הנדסה. הפרטים המלאים מוצגים במערכת אחרי התחברות.</p></div>`;
 }
 
 let running = false;

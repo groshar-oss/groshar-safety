@@ -3,16 +3,25 @@ import { S, siteOrgs } from '../app.js';
 import { derive, ACTIVITIES, CAT, ROLES, LAW } from '../duties.js';
 import { esc, fmtDate } from '../util.js';
 
-const page = (title, body) => `<!doctype html><html lang="he" dir="rtl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+const LOGO = () => new URL('icons/tzi-logo-color.svg', location.href).href;
+// עמוד להדפסה במיתוג צי הנדסה. bar = הודעה למסך בלבד (לא מודפסת)
+const page = (title, body, bar = '') => `<!doctype html><html lang="he" dir="rtl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>${esc(title)}</title><link href="https://fonts.googleapis.com/css2?family=Heebo:wght@400;600;800&display=swap" rel="stylesheet">
-<style>body{font-family:Heebo,Arial,sans-serif;color:#16213e;max-width:780px;margin:24px auto;padding:0 18px;line-height:1.6;background:#fff}
-h1{font-size:22px;margin:0 0 4px}h2{font-size:16px;margin:18px 0 6px}.mut{color:#6b7491;font-size:13px}table{border-collapse:collapse;width:100%;font-size:14px}
-td,th{border:1px solid #c9d1e8;padding:6px 8px;text-align:right;vertical-align:top}th{background:#eef1fa}.sig{display:grid;grid-template-columns:1fr 1fr;gap:28px;margin-top:36px}
-.sig div{border-top:1px solid #16213e;padding-top:6px;font-size:13px}.bar{position:sticky;top:0;background:#fff;padding:8px 0;margin-bottom:10px;border-bottom:1px solid #e3e7f1}
-button{font:inherit;padding:6px 16px;border-radius:8px;border:1px solid #2f5bea;background:#2f5bea;color:#fff;cursor:pointer}
-.sign{border:6px solid #0f1f4b;border-radius:14px;padding:22px 26px;font-size:20px}.sign h1{font-size:34px;text-align:center;margin-bottom:14px}.sign td{font-size:19px;padding:9px 12px}
-.note{font-size:12px;color:#6b7491;margin-top:10px}@media print{.bar{display:none}body{margin:0}}</style></head>
-<body><div class="bar"><button onclick="print()">הדפסה / שמירה כ-PDF</button></div>${body}</body></html>`;
+<style>body{font-family:Heebo,Arial,sans-serif;color:#1C232C;max-width:780px;margin:24px auto;padding:0 18px;line-height:1.6;background:#fff}
+h1{font-size:22px;margin:0 0 4px}h2{font-size:16px;margin:18px 0 6px;color:#3D5A78}.mut{color:#68717D;font-size:13px}table{border-collapse:collapse;width:100%;font-size:14px}
+td,th{border:1px solid #DDE1E6;padding:6px 8px;text-align:right;vertical-align:top}th{background:#EEF0F2;color:#1C232C}.sig{display:grid;grid-template-columns:1fr 1fr;gap:28px;margin-top:36px}
+.sig div{border-top:1px solid #1C232C;padding-top:6px;font-size:13px}.bar{position:sticky;top:0;background:#fff;padding:8px 0;margin-bottom:10px;border-bottom:1px solid #DDE1E6;font-size:13px;color:#68717D}
+.bar p{margin:6px 0 0}button{font:inherit;padding:6px 16px;border-radius:8px;border:1px solid #3D5A78;background:#3D5A78;color:#fff;cursor:pointer}
+.head{display:flex;align-items:center;justify-content:space-between;gap:16px;border-bottom:3px solid #1C232C;padding-bottom:10px;margin-bottom:16px}.head img{height:58px}
+.head .dot{width:9px;height:9px;border-radius:50%;background:#E8912D;display:inline-block;margin-inline-end:6px}
+.sign{border:8px solid #1C232C;border-radius:14px;padding:24px 28px 18px;font-size:20px;position:relative}
+.sign .logo{display:block;height:92px;margin:0 auto 10px}
+.sign h1{font-size:38px;text-align:center;margin:0 0 4px;letter-spacing:.02em}
+.sign .rule{height:4px;background:#3D5A78;border-radius:2px;margin:10px auto 18px;width:70%;position:relative}
+.sign .rule::after{content:"";position:absolute;inset-inline-end:-10px;top:-5px;width:14px;height:14px;border-radius:50%;background:#E8912D}
+.sign table{font-size:19px}.sign th{width:34%;background:#EEF0F2;font-size:18px}.sign td{font-size:20px;font-weight:600;padding:10px 12px}
+.note{font-size:12px;color:#68717D;margin-top:10px}@media print{.bar{display:none}body{margin:0}}</style></head>
+<body><div class="bar"><button onclick="print()">הדפסה / שמירה כ-PDF</button>${bar}</div>${body}</body></html>`;
 
 function open(html) {
   const url = URL.createObjectURL(new Blob([html], { type: 'text/html' }));
@@ -39,8 +48,8 @@ export function authLetter(site, person) {
   const backups = S.data.site_people.filter(p => p.site_id === site.id && p.role === 'rep' && p.backup && p.active !== false && p.id !== person.id);
   const rows = wmDutiesFor(site).map(([a, b]) => `<tr><td>${esc(a)}</td><td>${esc(b)}</td></tr>`).join('');
   open(page('כתב הסמכה · ' + person.name, `
-    <h1>כתב הסמכה לנציג מבצע הבנייה באתר</h1>
-    <div class="mut">לפי תקנה 2(ז) ל${esc(LAW.B)} (תיקון התשפ"ו-2025)</div>
+    <div class="head"><div><h1>כתב הסמכה לנציג מבצע הבנייה באתר</h1>
+    <div class="mut"><span class="dot"></span>לפי תקנה 2(ז) ל${esc(LAW.B)} (תיקון התשפ"ו-2025)</div></div><img src="${LOGO()}" alt="צי הנדסה"></div>
     <h2>הצדדים והאתר</h2>
     <table><tr><th>מבצע הבנייה</th><td>${esc(con)}</td></tr><tr><th>האתר</th><td>${esc(site.name)}, ${esc(site.address || '')}</td></tr>
       <tr><th>הנציג</th><td>${esc(person.name)}${person.phone ? ' · ' + esc(person.phone) : ''}${person.email ? ' · ' + esc(person.email) : ''}</td></tr>
@@ -53,28 +62,34 @@ export function authLetter(site, person) {
     <p><b>האחריות לפי הדין נשארת על מבצע הבנייה.</b> ההסמכה אינה מינוי מנהל עבודה לפי תקנה 2(א)(1), ואינה מעבירה את האחריות מבצע הבנייה לנציג.</p>
     <p>הנציג מאשר שקרא את החובות, שהוא מבין אותן, ושידווח מיד למבצע הבנייה על כל סיכון שאינו קביל או על כל מצב שבו אינו יכול לבצע אותן.</p>
     <div class="sig"><div>מבצע הבנייה: שם, תפקיד, חתימה וחותמת</div><div>הנציג: ${esc(person.name)}, חתימה</div><div>תאריך</div><div>תאריך</div></div>
-    <p class="note">את הכתב החתום מצרפים במערכת לחובה "רישום נציג מבצע הבנייה באתר", ומצרפים עותק לפנקס הכללי באתר (תקנה 2(ט)). המסמך הופק ממערכת ניהול הבטיחות של גרושר פרויקטים ואינו חוות דעת משפטית.</p>`));
+    <p class="note">את הכתב החתום מצרפים במערכת לחובה "רישום נציג מבצע הבנייה באתר", ומצרפים עותק לפנקס הכללי באתר (תקנה 2(ט)). המסמך הופק ממערכת ניהול הבטיחות של צי הנדסה ואינו חוות דעת משפטית.</p>`));
 }
 
-// שלט אתר: הפרטים של תקנה 7. באתר 2(ז) בלי מנהל עבודה מוצג הנציג (המלצה; הנוסח של תקנה 7 לא כולל פטור מפורש)
+// שלט אתר: הפרטים של תקנה 7, במיתוג צי הנדסה. שדה בלי ערך לא מופיע בשלט; הרשימה של מה שחסר מוצגת רק במסך.
+// באתר 2(ז) בלי מנהל עבודה מוצג האחראי מטעם מבצע הבנייה (המלצה; הנוסח של תקנה 7 לא כולל פטור מפורש)
 export function siteSign(site) {
   const d = derive(site.profile || {});
   const P = r => S.data.site_people.filter(p => p.site_id === site.id && p.role === r && p.active !== false && !p.backup);
   const con = siteOrgs(site.id, 'contractor'), dev = siteOrgs(site.id, 'developer');
   const wm = P('wm')[0], rep = P('rep')[0], bakar = P('bakar')[0], sm = P('sm')[0];
   const WT = { new: 'בנייה חדשה', addition: 'תוספת בנייה', fitout: 'עבודות גמר ופיט-אאוט', renovation: 'עבודות שיפוץ', infra: 'תשתיות ופיתוח', demolition: 'הריסה', gas: 'החלפת מיתקן גז' };
-  const row = (k, v) => `<tr><th>${k}</th><td>${v}</td></tr>`;
-  const wmRow = wm ? `${esc(wm.name)}${wm.phone ? ' · ' + esc(wm.phone) : ''}`
-    : d.exempt27 ? `אין חובת מינוי (תקנה 2(ז)).<br>אחראי מטעם מבצע הבנייה: ${rep ? esc(rep.name) + (rep.phone ? ' · ' + esc(rep.phone) : '') : '________'}` : '<b style="color:#c62828">לא מונה. אסור לעבוד בלי מנהל עבודה</b>';
-  open(page('שלט אתר · ' + site.name, `<div class="sign"><h1>אתר בנייה</h1><table>
-    ${row('מבצע הבנייה', con.map(o => esc(o.name)).join(', ') || '________')}
-    ${row('מנהל העבודה', wmRow)}
-    ${row('מהות העבודה', esc(WT[site.profile?.work_type] || '') + (site.address ? ' · ' + esc(site.address) : ''))}
-    ${dev.length ? row('המזמין', dev.map(o => esc(o.name)).join(', ')) : ''}
-    ${d.clientDuties ? row('בקר הבטיחות', bakar ? `${esc(bakar.name)}${bakar.license ? ' · ' + esc(bakar.license) : ''}` : '________') : ''}
-    ${d.siteMgr ? row('מנהל האתר', sm ? `${esc(sm.name)}${sm.license ? ' · ' + esc(sm.license) : ''}` : '________') : ''}
-    </table></div>
-    <p class="note">לפי תקנה 7 ל${esc(LAW.B)}: שם מבצע הבנייה ומענו, שם מנהל העבודה ומענו, מהות העבודה, ושם המזמין, בקר הבטיחות ומנהל האתר עם מספרי רישום, כשהם קיימים. כדאי להוסיף את כתובות המען בשלט המודפס.
-    ${d.exempt27 && !wm ? '<br>באתר בלי חובת מינוי מנהל עבודה, תקנה 7 לא אומרת מה לכתוב בשדה הזה. הצגת האחראי מטעם מבצע הבנייה היא המלצה של המערכת.' : ''}</p>`));
+  const who = (p, extra = '') => p ? esc(p.name) + (extra ? ' · ' + esc(extra) : '') + (p.phone ? ' · ' + esc(p.phone) : '') : '';
+  const missing = [];
+  const rows = [];
+  const add = (label, value, required = true) => { if (value) rows.push(`<tr><th>${label}</th><td>${value}</td></tr>`); else if (required) missing.push(label); };
+  add('מבצע הבנייה', con.map(o => esc(o.name)).join(', '));
+  if (wm) add('מנהל העבודה', who(wm, wm.license));
+  else if (d.exempt27) add('אחראי מטעם מבצע הבנייה', rep ? who(rep) + '<div style="font-size:14px;font-weight:400;color:#68717D">אין חובת מינוי מנהל עבודה (תקנה 2(ז))</div>' : '');
+  else add('מנהל העבודה', '');
+  const what = [WT[site.profile?.work_type], site.address].filter(Boolean).map(esc).join(' · ');
+  add('מהות העבודה', what);
+  add('המזמין', dev.map(o => esc(o.name)).join(', '), false);
+  if (d.clientDuties) add('בקר הבטיחות', bakar ? who(bakar, bakar.license) : '');
+  if (d.siteMgr) add('מנהל האתר', sm ? who(sm, sm.license) : '');
+  const bar = (missing.length ? `<p style="color:#c62828"><b>לא יופיעו בשלט כי עוד לא הוזנו:</b> ${missing.join(', ')}. משלימים בלשונית "בעלי תפקידים" ומפיקים שוב.${!wm && !d.exempt27 ? ' אסור לעבוד באתר בלי מנהל עבודה.' : ''}</p>` : '')
+    + `<p>לפי תקנה 7: שם מבצע הבנייה ומענו, שם מנהל העבודה ומענו, מהות העבודה, ושם המזמין, בקר הבטיחות ומנהל האתר עם מספרי רישום, כשהם קיימים. כדאי להוסיף את כתובות המען בשלט המודפס.${d.exempt27 && !wm ? ' באתר בלי חובת מינוי מנהל עבודה, תקנה 7 לא אומרת מה לכתוב בשדה הזה. הצגת האחראי מטעם מבצע הבנייה היא המלצה של המערכת.' : ''}</p>`;
+  open(page('שלט אתר · ' + site.name, `<div class="sign"><img class="logo" src="${LOGO()}" alt="צי הנדסה – ניהול וביצוע"><h1>אתר בנייה</h1><div class="rule"></div><table>
+    ${rows.join('')}
+    </table></div>`, bar));
 }
 export { CAT, ROLES };

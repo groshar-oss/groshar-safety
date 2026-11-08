@@ -13,7 +13,7 @@ import { viewSettings } from './views/settings.js';
 
 export const S = { user: null, ctx: null, data: null };
 
-const DEMO_ROLES = { admin: 'מנהלת שירות (גרושר)', dev: ROLES.dev, bakar: ROLES.bakar, con: ROLES.con, so: ROLES.so, sm: ROLES.sm, wm: ROLES.wm, rep: 'נציג מבצע הבנייה באתר' };
+const DEMO_ROLES = { admin: 'מנהל שירות (צי הנדסה)', dev: ROLES.dev, bakar: ROLES.bakar, con: ROLES.con, so: ROLES.so, sm: ROLES.sm, wm: ROLES.wm, rep: 'נציג מבצע הבנייה באתר' };
 
 // ===== הרשאות =====
 // תפקידי המשתמש באתר: מנהלת שירות רואה הכול; במצב הדגמה לפי "צפייה בתור"; בענן לפי ארגון ושיוך אישי לאתר
@@ -92,7 +92,7 @@ function shell(content, title) {
   const root = h(`<div class="app">
     <div class="mobile-top"><button id="mnav" aria-label="תפריט">☰</button><b>${esc(title || CONFIG.appName)}</b><a href="#/alerts" class="bell" aria-label="התראות">🔔${badge}</a></div>
     <aside class="side" id="side">
-      <div class="brand"><img src="icons/logo-neg.png" alt=""><div><b>גרושר פרויקטים</b><span>ניהול בטיחות באתר</span></div></div>
+      <div class="brand"><img src="icons/tzi-logo-on-dark.svg" alt="צי הנדסה – ניהול וביצוע"><span>ניהול בטיחות באתר</span></div>
       <nav class="nav">${NAV().map(([href, ico, label, k]) => `<a href="${href}" class="${isOn(href, hash) ? 'on' : ''}"><span class="ico">${ico}</span>${label}${k === 'alerts' ? badge : ''}</a>`).join('')}</nav>
       <div class="side-foot">${esc(S.user?.email || '')}<br>${esc(isAdmin() ? 'מנהלת שירות' : S.ctx.demoRole ? DEMO_ROLES[S.ctx.demoRole] : '')}${isCloud() ? ' · <button id="logout">יציאה</button>' : ''}</div>
     </aside>
@@ -147,7 +147,7 @@ export async function render() {
 
 function renderLogin() {
   const el = h(`<div class="login"><div class="box">
-    <div class="logo"><img src="icons/logo-neg.png" alt=""><div><b>גרושר פרויקטים</b><div class="mut small">ניהול בטיחות באתר בנייה</div></div></div>
+    <div class="logo"><img src="icons/tzi-logo-color.svg" alt="צי הנדסה – ניהול וביצוע"></div><div class="mut small" style="text-align:center;margin:-8px 0 16px">ניהול בטיחות באתר בנייה</div>
     <form id="lf">${field('אימייל', 'email', '', { type: 'email', req: true, attrs: 'autocomplete="username" dir="ltr"' })}
     ${field('סיסמה', 'password', '', { type: 'password', req: true, attrs: 'autocomplete="current-password" dir="ltr"' })}
     <div class="err" id="lerr" hidden></div>
