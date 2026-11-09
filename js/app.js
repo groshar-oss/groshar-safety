@@ -10,6 +10,8 @@ import { viewSite } from './views/site.js';
 import { viewAlerts } from './views/alerts.js';
 import { viewOrgs } from './views/orgs.js';
 import { viewSettings } from './views/settings.js';
+import { viewField, isFieldUser } from './views/field.js';
+import { syncExpiry } from './workers.js';
 
 export const S = { user: null, ctx: null, data: null };
 
@@ -55,7 +57,10 @@ export async function loadAll() {
   // הודעות רשמיות: טבלה חדשה. אם עוד לא קיימת בשרת, המערכת ממשיכה לעבוד בלעדיה
   const notices = await db.select('notices', { order: 'created_at' }).catch(() => []);
   const signatures = await db.select('signatures', { order: 'created_at' }).catch(() => []);
-  S.data = { orgs, sites, site_orgs, site_people, duties, events, notifications, checkins, notices, signatures };
+  // פנקס עובדים, הדרכות וציוד (חבילה 1.5). מי שאין לו הרשאה מקבל רשימה ריקה
+  const [workers, trainings, training_signatures, equipment, inspections] = await Promise.all(
+    ['workers', 'trainings', 'training_signatures', 'equipment', 'inspections'].map(t => db.select(t, { order: 'created_at' }).catch(() => [])));
+  S.data = { orgs, sites, site_orgs, site_people, duties, events, notifications, checkins, notices, signatures, workers, trainings, training_signatures, equipment, inspections };
   // סנכרון החובות מול הפרופיל של כל אתר (חובה חוזרת שבוצעה פותחת את הבאה)
   for (const s of sites) await syncSite(s, false);
   return S.data;
@@ -63,6 +68,8 @@ export async function loadAll() {
 export async function syncSite(site, reload = true) {
   const cur = S.data.duties.filter(d => d.site_id === site.id);
   const { add, upd } = sync(site, cur);
+  // חובות תוקף (עובדים וציוד): רק מי שרואה את פנקס העובדים מסנכרן אותן, כדי שמשתמש בלי גישה לא יסגור אותן בטעות
+  if (hasRole(site.id, 'con', 'so', 'sm', 'wm', 'rep')) { const x = syncExpiry(site, cur); add.push(...x.add); upd.push(...x.upd); }
   if (!add.length && !upd.length) return false;
   if (!hasRole(site.id, 'dev', 'con', 'bakar', 'so', 'sm', 'wm', 'rep')) return false;
   try {
@@ -77,9 +84,13 @@ export const visibleSites = () => S.data.sites.filter(s => isAdmin() || myRoles(
 export const orgName = id => S.data.orgs.find(o => o.id === id)?.name || '';
 export const siteOrgs = (siteId, kind) => S.data.site_orgs.filter(x => x.site_id === siteId && (!kind || x.kind === kind)).map(x => S.data.orgs.find(o => o.id === x.org_id)).filter(Boolean);
 
+// מסך השטח זמין למי שיש לו תפקיד שטח באתר כלשהו (או מנהל השירות)
+export const canField = () => visibleSites().some(s => myRoles(s.id).some(r => ['admin', 'con', 'wm', 'rep'].includes(r)));
+
 // ===== ניווט =====
 const NAV = () => [
-  ['#/', '◧', 'מה דורש טיפול'],
+  ['#/', '◧', isFieldUser() ? 'היום באתר' : 'מה דורש טיפול'],
+  ...(!isFieldUser() && canField() ? [['#/field', '⚑', 'היום באתר (שטח)']] : []),
   ['#/alerts', '🔔', 'התראות וחריגות', 'alerts'],
   ['#/sites', '▤', 'אתרים'],
   ...(isAdmin() ? [['#/orgs', '◎', 'ארגונים ומשתמשים']] : []),
@@ -97,7 +108,7 @@ function shell(content, title) {
     <aside class="side" id="side">
       <div class="brand"><img src="icons/tzi-logo-on-dark.svg" alt="צי הנדסה – ניהול וביצוע"><span>ניהול בטיחות באתר</span></div>
       <nav class="nav">${NAV().map(([href, ico, label, k]) => `<a href="${href}" class="${isOn(href, hash) ? 'on' : ''}"><span class="ico">${ico}</span>${label}${k === 'alerts' ? badge : ''}</a>`).join('')}</nav>
-      <div class="side-foot">${esc(S.user?.email || '')}<br>${esc(isAdmin() ? 'מנהלת שירות' : S.ctx.demoRole ? DEMO_ROLES[S.ctx.demoRole] : '')}${isCloud() ? ' · <button id="logout">יציאה</button>' : ''}</div>
+      <div class="side-foot">${esc(S.user?.email || '')}<br>${esc(isAdmin() ? 'מנהל שירות' : S.ctx.demoRole ? DEMO_ROLES[S.ctx.demoRole] : '')}${isCloud() ? ' · <button id="logout">יציאה</button>' : ''}</div>
     </aside>
     <main class="main" id="main"></main></div>`);
   if (!isCloud()) {
@@ -126,14 +137,16 @@ export async function render() {
   const root = $('#root');
   if (!S.user) return renderLogin();
   if (!isAdmin() && !visibleSites().length && isCloud()) {
-    root.replaceChildren(h(`<div class="login"><div class="box"><h2>עדיין אין לך גישה לאתר</h2><p class="mut">המשתמש ${esc(S.user.email)} רשום, אבל עוד לא שויך לארגון או לאתר. מנהלת השירות או נציג הארגון צריכים להוסיף אותו.</p><button class="btn" id="lo">יציאה</button></div></div>`));
+    root.replaceChildren(h(`<div class="login"><div class="box"><h2>עדיין אין לך גישה לאתר</h2><p class="mut">המשתמש ${esc(S.user.email)} רשום, אבל עוד לא שויך לארגון או לאתר. מנהל השירות או נציג הארגון צריכים להוסיף אותו.</p><button class="btn" id="lo">יציאה</button></div></div>`));
     $('#lo').onclick = async () => { await db.signOut(); location.reload(); };
     return;
   }
   const [, route, a, b, c, d] = (location.hash || '#/').split('/');
   let view, title;
   try {
-    if (!route) { view = viewHome(); title = 'מה דורש טיפול'; }
+    if (!route && isFieldUser()) { view = viewField(); title = 'היום באתר'; }
+    else if (!route) { view = viewHome(); title = 'מה דורש טיפול'; }
+    else if (route === 'field') { view = viewField(a); title = 'היום באתר'; }
     else if (route === 'alerts') { view = viewAlerts(); title = 'התראות וחריגות'; }
     else if (route === 'sites') { view = viewSites(); title = 'אתרים'; }
     else if (route === 'new-site') { view = viewNewSite(a); title = a ? 'פרופיל משפטי' : 'אתר חדש'; }
@@ -163,7 +176,7 @@ function renderLogin() {
     err(''); const v = vals(); if (!v.email || v.password.length < 8) return err('אימייל וסיסמה של 8 תווים לפחות');
     try { const r = await db.signUp(v.email, v.password); if (r === 'signed_in') await boot(); else err('נשלח אימייל לאישור. אחרי האישור אפשר להיכנס.'); } catch (x) { err(x.message); }
   };
-  $('#forgot').onclick = async () => { err(''); const v = vals(); if (!v.email) return err('כתבי את האימייל ואז לחצי שוב'); try { await db.resetPassword(v.email); err('נשלח קישור לאיפוס סיסמה'); } catch (x) { err(x.message); } };
+  $('#forgot').onclick = async () => { err(''); const v = vals(); if (!v.email) return err('צריך לכתוב את האימייל ואז ללחוץ שוב'); try { await db.resetPassword(v.email); err('נשלח קישור לאיפוס סיסמה'); } catch (x) { err(x.message); } };
 }
 
 async function newPassword() {
@@ -183,7 +196,7 @@ export async function boot() {
     await loadAll();
   } catch (e) {
     console.error(e);
-    $('#root').replaceChildren(h(`<div class="login"><div class="box"><h2>לא הצלחנו להתחבר</h2><p class="neg">${esc(e.message)}</p><p class="mut small">בדקי את הכתובת והמפתח ב-config.js ואת החיבור לאינטרנט.</p></div></div>`));
+    $('#root').replaceChildren(h(`<div class="login"><div class="box"><h2>לא הצלחנו להתחבר</h2><p class="neg">${esc(e.message)}</p><p class="mut small">צריך לבדוק את הכתובת והמפתח ב-config.js ואת החיבור לאינטרנט.</p></div></div>`));
     return;
   }
   await render();

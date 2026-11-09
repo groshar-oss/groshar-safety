@@ -10,7 +10,10 @@ export const LAW = {
   H: 'תקנות ארגון הפיקוח על העבודה (מסירת מידע והדרכת עובדים), התשנ"ט-1999',
   P: 'פקודת הבטיחות בעבודה [נוסח חדש], התש"ל-1970',
   T: 'פקודת תאונות ומחלות משלח-יד (הודעה), 1945',
-  S: 'תקנות ארגון הפיקוח על העבודה (תכנית לניהול הבטיחות), התשע"ג-2013'
+  S: 'תקנות ארגון הפיקוח על העבודה (תכנית לניהול הבטיחות), התשע"ג-2013',
+  G: 'תקנות הבטיחות בעבודה (עבודה בגובה), התשס"ז-2007',
+  Y: 'תקנות עבודת הנוער (עבודות אסורות ועבודות מוגבלות), התשנ"ו-1995',
+  F: 'חוק עובדים זרים, התשנ"א-1991'
 };
 
 export const ROLES = {
@@ -25,6 +28,8 @@ export const ROLES = {
   sub: 'קבלן משנה',
   viewer: 'צופה'
 };
+// תפקידים שאפשר לרשום באתר: רק מה שהתקנות דורשות. "קבלן משנה" ו"צופה" לא נדרשים בתקנות ולכן לא נרשמים
+export const ASSIGNABLE = ['dev', 'bakar', 'con', 'so', 'sm', 'wm', 'rep', 'fa'];
 export const SIDE_OF = { dev: 'dev', bakar: 'dev', con: 'con', so: 'con', sm: 'con', wm: 'con', rep: 'con', fa: 'con', sub: 'con', viewer: 'dev' };
 
 export const WORK_TYPES = {
@@ -234,7 +239,23 @@ export const CATALOG = [
   { key: 'con_notice_end', side: 'con', holder: 'con', kind: 'event', dueH: 24, warnH: 6,
     title: 'הודעה מקוונת למפקח על סיום העבודה', ref: `תקנה 6א(א)(2) ל${LAW.B}`, plain: '', evidence: 'אישור הגשה' }
 ];
-export const CAT = Object.fromEntries(CATALOG.map(c => [c.key, c]));
+// ===== תוקף: חובה לכל עובד ולכל ציוד, לפי תאריך התוקף. המפתח: exp_xxx:<מזהה> =====
+// נוצרות ונסגרות לבד מפנקס העובדים ומרשימת הציוד, לא ידנית
+export const EXPIRY = [
+  { key: 'exp_train', side: 'con', holder: 'wm', kind: 'expiry', critical: true, warnH: 14 * 24, ref: `תקנות 3(א), 6 ל${LAW.H}`,
+    plain: 'אסור להעסיק עובד שלא קיבל הדרכה לפני תחילת העבודה ואחת לשנה. נסגר לבד כשהעובד חותם על הדרכה שנתית או הדרכת עובד חדש.', evidence: 'חתימת העובד על הדרכה' },
+  { key: 'exp_height', side: 'con', holder: 'wm', kind: 'expiry', critical: true, warnH: 14 * 24, ref: `תקנות 5, 6(ג), 6(ד) ל${LAW.G}`,
+    plain: 'עבודה בגובה רק עם אישור בתוקף (עד שנתיים). נסגר לבד כשמעדכנים תוקף חדש וצילום של האישור בכרטיס העובד.', evidence: 'אישור עבודה בגובה בתוקף' },
+  { key: 'exp_permit', side: 'con', holder: 'wm', kind: 'expiry', critical: true, warnH: 14 * 24, ref: `סעיפים 1יג, 2 ל${LAW.F}`,
+    plain: 'אסור להעסיק עובד זר בלי היתר והרשאה לעבוד בישראל. נסגר לבד כשמעדכנים תוקף חדש בכרטיס העובד.', evidence: 'היתר בתוקף' },
+  { key: 'exp_f8', side: 'con', holder: 'wm', kind: 'expiry', critical: true, warnH: 10 * 24, ref: `תקנה 3א ל${LAW.H}`,
+    plain: 'עובד זר עובר הדרכה נוספת של 8 שעות במוסד הכשרה מוכר, בשפתו, לפני תום חודש מכניסתו לישראל. נסגר לבד כשמזינים את תאריך ההדרכה והמוסד בכרטיס העובד.', evidence: 'אישור המוסד' },
+  { key: 'exp_equip', side: 'con', holder: 'con', kind: 'expiry', critical: true, warnH: 30 * 24, ref: `סעיפים 75, 76, 81, 86 ל${LAW.P}`,
+    plain: 'מכונת הרמה נבדקת בידי בודק מוסמך לפחות אחת ל-14 חודשים, ושרשראות, חבלים ואביזרי הרמה אחת ל-6 חודשים. אין להשתמש בציוד בלי תסקיר בתוקף. נסגר לבד כשמזינים תסקיר חדש.', evidence: 'תסקיר בודק מוסמך' }
+];
+const CAT0 = Object.fromEntries([...CATALOG, ...EXPIRY].map(c => [c.key, c]));
+// חובת תוקף נמצאת לפי תחילת המפתח (exp_height:<id> → exp_height)
+export const CAT = new Proxy(CAT0, { get: (t, k) => t[k] ?? (typeof k === 'string' && k.includes(':') ? t[k.split(':')[0]] : undefined) });
 
 // אירועים שהמשתמש מדווח, ומה כל אחד פותח
 export const EVENTS = {

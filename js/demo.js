@@ -5,7 +5,7 @@ export function demoData(uuid) {
   const now = Date.now(), D = 864e5, H = 36e5;
   const day = k => new Date(now + k * D).toISOString().slice(0, 10);
   const at = k => new Date(now + k * H).toISOString();
-  const T = { orgs: [], memberships: [], sites: [], site_orgs: [], site_people: [], duties: [], events: [], notifications: [], files: [], audit_log: [], checkins: [], notices: [], signatures: [] };
+  const T = { orgs: [], memberships: [], sites: [], site_orgs: [], site_people: [], duties: [], events: [], notifications: [], files: [], audit_log: [], checkins: [], notices: [], signatures: [], workers: [], trainings: [], training_signatures: [], equipment: [], inspections: [] };
   const org = (name, kind, reg) => { const o = { id: uuid(), name, kind, reg_no: reg, demo: true, created_at: at(-24 * 60) }; T.orgs.push(o); return o; };
   const dev = org('אופק יזמות והשקעות בע"מ (דמו)', 'developer', '515000001');
   const con1 = org('א.ב. בנייה והנדסה בע"מ (דמו)', 'contractor', '515000002');
@@ -109,5 +109,25 @@ export function demoData(uuid) {
   resync(s4);
   const tk4 = T.duties.filter(x => x.site_id === s4.id && x.key === 'daily_checkin').map(x => x.seq).sort((a, b) => a - b);
   checkins(s4, 'מוטי אזולאי (נציג מבצע הבנייה)', { skip: [tk4.at(-3)], checks: { machines: 'ביקורת גידור והתקני בטיחות במכונות (תקנה 142א)' } });
+
+  // פנקס עובדים, הדרכות וציוד (דמו). אין צילומים אמיתיים בדמו
+  const born = y => new Date(now - y * 365.25 * D).toISOString().slice(0, 10);
+  const worker = (site, name, extra = {}) => { const w = { id: uuid(), site_id: site.id, name, id_type: 'il', id_number: '000000018', id_photo_path: `${site.id}/workers/demo/id.jpg`, birth_date: born(30),
+    company: '', trade: '', phone: '', foreign_worker: false, height: false, active: true, added_by_email: 'demo', created_at: at(-24 * 25), ...extra }; T.workers.push(w); return w; };
+  const w1 = worker(s4, 'אחמד חאג׳ (דמו)', { company: con2.name, trade: 'גבס', height: true, height_until: day(9), height_path: `${s4.id}/workers/demo/h.jpg` });
+  const w2 = worker(s4, 'יבגני קוזלוב (דמו)', { company: 'אלקטרו פלוס (קבלן משנה, דמו)', trade: 'חשמל', birth_date: born(41) });
+  const w3 = worker(s4, 'Somchai Kaew (דמו)', { id_type: 'passport', id_number: 'AA1234567', company: con2.name, trade: 'טיח', foreign_worker: true, nationality: 'תאילנד',
+    entry_date: day(-20), permit_no: '2026-77881', permit_until: day(200), birth_date: born(28) });
+  worker(s4, 'דניאל אברהם (דמו)', { company: con2.name, trade: 'צבע', birth_date: born(19), created_at: at(-3) });
+  const tr = { id: uuid(), site_id: s4.id, kind: 'intro', topic: 'הדרכת אתר: סיכוני האתר, פיגומים, גידור מכונות, עזרה ראשונה, יציאות חירום', trainer_name: 'מוטי אזולאי', trainer_title: 'נציג מבצע הבנייה, קורס מנהלי עבודה',
+    language: 'עברית, ערבית', content: '', held_at: at(-24 * 20), pdf_path: null, closed_at: at(-24 * 20 + 1), created_by_email: 'demo', created_at: at(-24 * 20) };
+  T.trainings.push(tr);
+  for (const w of [w1, w2, w3]) T.training_signatures.push({ id: uuid(), training_id: tr.id, site_id: s4.id, worker_id: w.id, worker_name: w.name, statement: 'קיבלתי הדרכה (דמו)',
+    image: '', signed_at: at(-24 * 20 + 0.3), signed_by_email: 'demo', created_at: at(-24 * 20 + 0.3) });
+  const eq = (site, kind, name, ident, inspected, next) => { const e = { id: uuid(), site_id: site.id, kind, name, ident, owner: '', active: true, created_at: at(-24 * 60) }; T.equipment.push(e);
+    if (inspected) T.inspections.push({ id: uuid(), site_id: site.id, equipment_id: e.id, inspected_at: inspected, next_due: next, inspector: 'בודק מוסמך (דמו)', cert_path: null, note: '', created_by_email: 'demo', created_at: at(-24 * 60) }); };
+  eq(s1, 'lift_machine', 'עגורן צריח', 'TC-118', day(-400), day(25));
+  eq(s1, 'lift_gear', 'שרשראות הרמה ומענבים', 'סט 3', day(-170), day(12));
+  eq(s4, 'lift_machine', 'במת הרמה מספריים', 'SL-22', day(-60), day(365));
   return T;
 }

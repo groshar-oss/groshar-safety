@@ -8,6 +8,7 @@ import { checkinForm } from './checkin.js';
 import { NOTICES, GOV, CHANNEL, NST, noticeFor, needsApproval, ensureDraft, saveNotice, fieldsText, emptyFields } from '../notices.js';
 import { gReady, gmailSend, isEmail } from '../google.js';
 import { noticeLetter } from './docs.js';
+import { expiryLink } from '../workers.js';
 
 export const fmtDT = t => t ? new Date(t).toLocaleString('he-IL', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' }) : '';
 export const chip = lv => `<span class="chip lv-${lv} ${LEVELS[lv].chip}">${LEVELS[lv].label}</span>`;
@@ -102,12 +103,13 @@ export async function openDuty(id) {
   </div>`;
   const el = h(`<div class="ov" role="dialog" aria-modal="true"><div class="dlg wide"><div class="dlg-h"><h3>${esc(i.title)}</h3><button class="x" aria-label="סגירה" data-x>✕</button></div>
     <div class="dlg-b">${body}</div>
-    <div class="dlg-f">${act ? `<button class="btn" data-done ${isGate && !gate.ready ? 'disabled title="יש תנאים פתוחים בשער ההתחלה"' : ''}>${isGate ? 'אישור בכתב להתחלת עבודה' : i.key === 'daily_checkin' ? 'צ\'ק-אין' : 'סימון כבוצע עם ראיה'}</button>` : ''}
-      ${waive ? '<button class="btn ghost" data-na>לא חל</button><button class="btn ghost" data-waive>דחייה מוצדקת</button>' : ''}
+    <div class="dlg-f">${i.kind === 'expiry' && i.status === 'open' ? `<a class="btn" href="${expiryLink(i)}" data-x2>${i.key.startsWith('exp_equip') ? 'לציוד ולתסקיר' : 'לכרטיס העובד'}</a>` : act ? `<button class="btn" data-done ${isGate && !gate.ready ? 'disabled title="יש תנאים פתוחים בשער ההתחלה"' : ''}>${isGate ? 'אישור בכתב להתחלת עבודה' : i.key === 'daily_checkin' ? 'צ\'ק-אין' : 'סימון כבוצע עם ראיה'}</button>` : ''}
+      ${waive && i.kind !== 'expiry' ? '<button class="btn ghost" data-na>לא חל</button><button class="btn ghost" data-waive>דחייה מוצדקת</button>' : ''}
       <button class="btn ghost" data-x>סגירה</button></div></div></div>`);
   document.body.appendChild(el);
   const close = () => { el.remove(); const [, r, a, b, c2] = location.hash.split('/'); if (r === 'site' && c2) location.hash = `#/site/${a}/${b}`; };
   $$('[data-x]', el).forEach(b => b.onclick = close);
+  $('[data-x2]', el)?.addEventListener('click', () => el.remove());
   wireSend(el, x);
   if (nt) wireNotice(el, nt, i, site, x, () => { el.remove(); openDuty(i.id); }, close);
   $('[data-file]', el)?.addEventListener('click', () => openFile(i.file_path));
@@ -196,8 +198,11 @@ function wireNotice(el, n, i, site, x, reopen, close) {
   }
 }
 
-async function openFile(path) {
-  try { const b = await db.getFile(path); window.open(URL.createObjectURL(b), '_blank'); } catch (e) { toast(e.message, 'bad'); }
+// פתיחת קובץ: החלון נפתח מיד (בטלפון חלון שנפתח אחרי המתנה נחסם), ואז נטען הקובץ
+export async function openFile(path) {
+  const w = window.open('', '_blank');
+  try { const b = await db.getFile(path); const u = URL.createObjectURL(b); if (w && w.location) w.location.href = u; else window.open(u, '_blank'); }
+  catch (e) { w?.close?.(); toast(e.message, 'bad'); }
 }
 
 // ביצוע: חובה ראיה (קובץ או מספר אסמכתה) ותיאור

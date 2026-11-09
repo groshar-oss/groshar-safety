@@ -384,3 +384,33 @@ details summary{cursor:pointer;font-size:13px;font-weight:600;margin-top:8px}
 .sgslot{border:1px solid var(--line);border-radius:10px;padding:10px}.sgslot.done{border-color:#13804a}
 .sgslot img{display:block;max-width:100%;height:80px;background:#fff;border-radius:6px;margin:6px 0}
 .sgpad{display:block;width:100%;height:160px;background:#fff;border:1px dashed #9DB3CB;border-radius:8px;touch-action:none;margin:8px 0}
+
+/* חבילה 1.5: עובדים, הדרכות, ציוד, משימות חוזרות, מסך שטח */
+@media (max-width:760px){.tabs{flex-wrap:nowrap;overflow-x:auto;-webkit-overflow-scrolling:touch;scrollbar-width:none;padding-bottom:4px}.tabs::-webkit-scrollbar{display:none}.tabs a{flex:0 0 auto;padding:8px 14px;font-size:14px}}
+.fbar{display:flex;gap:10px;flex-wrap:wrap;margin-bottom:14px}
+.btn.big{min-height:52px;font-size:16px;padding:12px 18px;flex:1 1 160px;justify-content:center}
+.search{margin-bottom:10px}
+.wrow{display:flex;align-items:center;justify-content:space-between;gap:10px;width:100%;text-align:right;background:var(--card);color:inherit;text-decoration:none;font:inherit;cursor:pointer;min-height:56px;border-inline-start:5px solid var(--line)}
+.wrow.lv-bad{border-inline-start-color:#c62828}.wrow.lv-warn{border-inline-start-color:#e08a00}.wrow.lv-ok{border-inline-start-color:#2fb36b}.wrow.off{opacity:.55}
+.wrow .go{font-size:22px;color:var(--mut)}.wrow .actions{flex-wrap:wrap;justify-content:flex-end}
+.wrow.flash{outline:3px solid var(--tzi-accent)}
+.sub-f{border-inline-start:3px solid var(--line2);padding-inline-start:10px;margin:4px 0 10px}
+.sigthumb{height:40px;max-width:120px;background:#fff;border-radius:6px;border:1px solid var(--line)}
+.sigimg{height:60px;background:#fff;border-radius:6px;display:block}
+.ov.full{padding:0}.ov.full .dlg{width:100%;height:100%;max-height:100%;border-radius:0}
+@media (min-width:761px){.ov.full{padding:16px}.ov.full .dlg{width:min(760px,100%);height:auto;max-height:94vh;border-radius:14px}}
+.signname{font-size:22px;font-weight:800;margin-bottom:6px}
+.signtext{font-size:16px;line-height:1.6;background:var(--th);border-radius:10px;padding:12px}
+.sgpad.tall{height:min(42vh,320px)}
+.signdlg .actions{display:flex;gap:10px}.signdlg .actions .btn{flex:1;min-height:52px}
+.field h1{margin:4px 0 0}.field .sub{color:var(--mut);margin-bottom:12px}
+.field .chips{display:flex;gap:6px;overflow-x:auto;padding-bottom:6px;margin-bottom:6px}.field .chips .chip{font-size:13px;padding:6px 12px;text-decoration:none;color:var(--ink)}
+.chip.on{background:var(--navy);color:#fff}
+.bigbtns{display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:10px;margin-bottom:16px}
+.bb{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;min-height:92px;border-radius:14px;border:1px solid var(--line);background:var(--card);color:var(--ink);font:inherit;font-weight:700;font-size:15px;text-decoration:none;cursor:pointer;box-shadow:var(--shadow)}
+.bb span{font-size:26px;line-height:1}.bb.danger{border-color:#f2b8b8;color:#c62828}
+.fsum{display:block;text-decoration:none;color:inherit}.fsum .chip{margin-inline-end:6px}
+.flinks{display:flex;gap:16px;flex-wrap:wrap;justify-content:center;margin:8px 0 24px}
+.rrow{display:flex;justify-content:space-between;gap:12px;padding:10px 0;border-bottom:1px solid var(--line);text-decoration:none;color:inherit}
+.rrow:last-child{border-bottom:0}.rr2{text-align:left;min-width:120px;flex:0 0 auto}
+@media (max-width:760px){.rrow{flex-direction:column;gap:4px}.rr2{text-align:right}}

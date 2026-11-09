@@ -21,7 +21,7 @@ export async function authSigs(site, person) {
 export const authStatus = person => { const all = sigsFor(person); return all.length ? new Set(all.map(g => g.slot)).size === 2 ? 'signed' : 'partial' : 'none'; };
 
 // משטח חתימה: ציור באצבע או בעכבר
-function pad(canvas) {
+export function pad(canvas) {
   const ctx = canvas.getContext('2d'); let ink = false, down = false;
   const fit = () => { const r = canvas.getBoundingClientRect(), d = window.devicePixelRatio || 1; canvas.width = r.width * d; canvas.height = r.height * d; ctx.scale(d, d); ctx.lineWidth = 2.4; ctx.lineCap = 'round'; ctx.lineJoin = 'round'; ctx.strokeStyle = '#1C232C'; };
   fit();

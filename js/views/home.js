@@ -54,7 +54,7 @@ export function viewHome() {
         ${watch.length ? `<div class="card"><h2>חריגות של אחרים באתרים שלך <span class="mut small">${watch.length}</span></h2>${watch.slice(0, 20).map(x => dutyCard(x.duty, { showSite: true })).join('')}</div>` : ''}
       </div>
       <div><div class="card"><h2>אתרים</h2>${sites.map(siteCard).join('') || '<div class="empty">אין אתרים עדיין</div>'}</div>
-        <div class="card small mut">התפקיד שלך: ${[...new Set(sites.flatMap(s => myRoles(s.id)))].map(r => r === 'admin' ? 'מנהלת שירות' : ROLES[r]).join(', ') || '—'}</div></div>
+        <div class="card small mut">התפקיד שלך: ${[...new Set(sites.flatMap(s => myRoles(s.id)))].map(r => r === 'admin' ? 'מנהל שירות' : ROLES[r]).join(', ') || '—'}</div></div>
     </div></div>`);
   void chip;
   return el;
