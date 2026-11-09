@@ -1,4 +1,5 @@
 // רכיבים משותפים: תגית רמה, כרטיס חובה, כפתורי שליחה, חלון חובה (ביצוע / לא חל / דחייה)
+import { bakarReportForm, bakarReportOf, canBakarReport, accidentForm, accidentOf, canAccident } from './reports.js';
 import { db } from '../db.js';
 import { S, canAct, canWaive, siteById, syncSite, render, hasRole } from '../app.js';
 import { CAT, LEVELS, ROLES, level, leftText, recipients, gateStatus, EVENTS } from '../duties.js';
@@ -94,6 +95,9 @@ export async function openDuty(id) {
   const body = `<div class="dd">
     <div class="dh">${chip(x.level)}${i.critical ? '<span class="chip red">חובה קריטית</span>' : ''}<span class="chip">${sideName(i.side)}</span><span class="chip violet">${esc(site.name)}</span></div>
     ${td ? `<div class="todo-box"><b>מה עושים עכשיו</b><p>${esc(td.text)}</p>${tdBtn ? `<div class="actions">${tdBtn}</div>` : ''}${!act && !td.expiry && !td.go && td.label ? `<p class="small mut">את הסימון עושה: ${esc(x.roles.map(r => ROLES[r]).join(', '))}${x.to.length ? ' (' + esc(x.to.map(p => p.name).join(', ')) + ')' : ''}</p>` : ''}</div>` : ''}
+    ${i.key === 'bakar_report' && i.status === 'open' && canBakarReport(i.site_id) ? '<div class="todo-box"><b>דוח הביקור בטלפון</b><p>ממלאים ממצאים עם צילומים ומסמנים סיכון שאינו קביל. ה-PDF נוצר לבד, החובה נסגרת, וממצאים עם צילום נכנסים לרשימת הליקויים.</p><div class="actions"><button type="button" class="btn" data-bkr>📝 מילוי דוח הביקור</button></div></div>' : ''}
+    ${i.key === 'bakar_report' && bakarReportOf(i.id)?.pdf_path ? '<div class="actions"><button type="button" class="btn ghost" data-bkpdf>דוח הביקור (PDF)</button></div>' : ''}
+    ${i.key === 'accident_notice' && ev && canAccident(i.site_id) ? `<div class="todo-box"><b>תיעוד התאונה</b><p>${accidentOf(ev.id) ? 'יש תיעוד. אפשר להוסיף הצהרות עדים עד סיום התיעוד.' : 'צילומי המקום, פרטי הנפגע והצהרות עדים חתומות בטלפון. הפרטים נכנסים לטיוטת ההודעה למפקח.'}</p><div class="actions"><button type="button" class="btn" data-acc>📋 ${accidentOf(ev.id) ? 'פתיחת התיעוד' : 'תיעוד התאונה'}</button></div></div>` : ''}
     <p class="ref"><b>§</b> ${esc(i.ref)}</p>
     ${c.plain ? `<p>${esc(c.plain)}</p>` : ''}
     ${ev ? `<div class="note">נוצר מאירוע: <b>${esc(EVENTS[ev.type]?.label || ev.type)}</b> · ${fmtDT(ev.occurred_at)}${ev.description ? '<br>' + esc(ev.description) : ''}</div>` : ''}
@@ -122,6 +126,9 @@ export async function openDuty(id) {
   wireSend(el, x);
   if (nt) wireNotice(el, nt, i, site, x, () => { el.remove(); openDuty(i.id); }, close);
   $('[data-file]', el)?.addEventListener('click', () => openFile(i.file_path));
+  $('[data-bkr]', el)?.addEventListener('click', () => { el.remove(); bakarReportForm(i); });
+  $('[data-bkpdf]', el)?.addEventListener('click', () => openFile(bakarReportOf(i.id).pdf_path));
+  $('[data-acc]', el)?.addEventListener('click', () => { el.remove(); accidentForm(site, ev); });
   $('[data-done]', el)?.addEventListener('click', async () => { close(); if (i.key === 'daily_checkin') await checkinForm(i.site_id, i); else await completeDuty(i); });
   $('[data-na]', el)?.addEventListener('click', async () => { close(); await closeDuty(i, 'na'); });
   $('[data-waive]', el)?.addEventListener('click', async () => { close(); await closeDuty(i, 'waived'); });

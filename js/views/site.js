@@ -14,6 +14,7 @@ import { tabEquipment } from './equipment.js';
 import { tabRecurring } from './recurring.js';
 import { tabInspect, canInspect } from './inspect.js';
 import { tabDefects, defectSummary, defectsOf, SEV } from './defects.js';
+import { accidentForm, accidentOf, canAccident } from './reports.js';
 import { TRAINING_KINDS, sigsOfTraining, equipmentOf, headcount, renderPdfPages, pagesToPdf } from '../workers.js';
 
 const TABS = [['overview', 'סקירה'], ['recurring', 'משימות חוזרות'], ['workers', 'עובדים והדרכות'], ['equipment', 'ציוד ותסקירים'], ['defects', 'ליקויים'], ['duties', 'חובות'], ['events', 'אירועים'], ['people', 'בעלי תפקידים'], ['log', 'פנקס כללי'], ['audit', 'יומן ביקורת']];
@@ -136,12 +137,15 @@ function tabDuties(s) {
 function tabEvents(s) {
   const evs = S.data.events.filter(e => e.site_id === s.id).sort((a, b) => String(b.occurred_at).localeCompare(String(a.occurred_at)));
   const spawned = e => S.data.duties.filter(d => d.event_id === e.id);
-  return h(`<div><div class="card"><h2>אירועים באתר</h2>
+  const el = h(`<div><div class="card"><h2>אירועים באתר</h2>
     <p class="small mut">כל אירוע פותח את החובות שהתקנות מחייבות בעקבותיו, עם מועד. למשל: דיווח על סיכון שאינו קביל פותח חובת תגובה לקבלן וחובת אישור בכתב ליזם תוך 48 שעות.</p>
     ${canReport(s.id) ? '<button class="btn" data-ev2>דיווח אירוע חדש</button>' : ''}</div>
     ${evs.map(e => `<div class="card ev ${EVENTS[e.type]?.critical ? 'crit' : ''}"><div class="dh"><b>${esc(EVENTS[e.type]?.label || e.type)}</b><span class="mut small">${fmtDT(e.occurred_at)}</span></div>
       ${e.description ? `<p>${esc(e.description)}</p>` : ''}<div class="small mut">דיווח: ${esc(e.reported_by || '')}</div>
+      ${e.type === 'accident' && (canAccident(s.id) || accidentOf(e.id)) ? `<div class="actions"><button class="btn small" data-acc="${e.id}">📋 ${accidentOf(e.id) ? 'תיעוד התאונה' + (accidentOf(e.id).closed_at ? ' (הסתיים)' : '') : 'תיעוד התאונה: צילומים ועדים'}</button></div>` : ''}
       ${spawned(e).map(x => dutyCard(x)).join('')}</div>`).join('') || '<div class="card empty">לא דווחו אירועים</div>'}</div>`);
+  $$('[data-acc]', el).forEach(b => b.onclick = () => accidentForm(s, evs.find(e => e.id === b.dataset.acc)));
+  return el;
 }
 
 export const eventFormFor = (s, type) => eventForm(s, type);

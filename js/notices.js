@@ -57,8 +57,10 @@ export const NOTICES = {
     return { fields: [['סוג ההודעה', 'בעל תפקיד הפסיק לכהן'], ['מועד הפסקת הכהונה', dt(e?.occurred_at)], ['פרטים', e?.description || ''], ...siteFields(site)] }; } },
   con_notice_end: { channel: 'gov', gov: 'site', build: (site, duty) => ({ fields: [['סוג ההודעה', 'סיום עבודות הבנייה'], ['מועד סיום העבודה', fmtDate(eventOf(duty)?.occurred_at || new Date().toISOString())], ...siteFields(site)] }) },
   accident_notice: { channel: 'gov', gov: 'accident', build: (site, duty) => { const e = eventOf(duty);
-    return { fields: [['מקום התאונה', [site.name, site.address].filter(Boolean).join(', ')], ['המעסיק', siteOrgs(site.id, 'contractor').map(orgLine).join('; ')],
-      ['מועד התאונה', dt(e?.occurred_at)], ['תיאור התאונה', e?.description || ''], ['פרטי הנפגע (שם, ת"ז, תפקיד)', ''], ['חומרת הפגיעה', '']] }; } },
+    const a = (S.data.accident_reports || []).find(r => r.event_id === e?.id);
+    return { fields: [['מקום התאונה', [site.name, site.address, a?.place].filter(Boolean).join(', ')], ['המעסיק', siteOrgs(site.id, 'contractor').map(orgLine).join('; ')],
+      ['מועד התאונה', dt(a?.occurred_at || e?.occurred_at)], ['תיאור התאונה', a?.how || e?.description || ''], ['פרטי הנפגע (שם, ת"ז, תפקיד)', a ? [a.injured_name, a.injured_id].filter(Boolean).join(', ') : ''],
+      ['חומרת הפגיעה', a ? [a.injury, a.evac ? 'פונה אל ' + a.evac : ''].filter(Boolean).join('. ') : '']] }; } },
   so_stop_notice: { channel: 'gov', gov: 'safety', build: (site, duty) => { const e = eventOf(duty);
     return { fields: [['האתר', [site.name, site.address].filter(Boolean).join(', ')], ['מבצע הבנייה', siteOrgs(site.id, 'contractor').map(orgLine).join('; ')],
       ['הממונה על הבטיחות', personLine(people(site, 'so')[0])], ['מועד הפסקת העבודה', dt(e?.occurred_at)], ['הסיבה להפסקה', e?.description || '']] }; } },

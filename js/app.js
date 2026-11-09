@@ -13,6 +13,7 @@ import { viewOrgs } from './views/orgs.js';
 import { viewSettings } from './views/settings.js';
 import { viewField, isFieldUser } from './views/field.js';
 import { syncExpiry } from './workers.js';
+import { viewOverview, showOverview } from './views/overview.js';
 
 export const S = { user: null, ctx: null, data: null };
 
@@ -66,7 +67,9 @@ export async function loadAll() {
     ['attendance', 'worker_exemptions', 'site_inspections'].map(t => db.select(t, { order: 'created_at' }).catch(() => [])));
   // ליקויי בטיחות (חבילה 1.7)
   const defects = await db.select('defects', { order: 'created_at' }).catch(() => []);
-  S.data = { orgs, sites, site_orgs, site_people, duties, events, notifications, checkins, notices, signatures, workers, trainings, training_signatures, equipment, inspections, attendance, worker_exemptions, site_inspections, defects };
+  // דוחות ביקור בקר ותיעוד תאונות (חבילה 1.7 שלב ב)
+  const [bakar_reports, accident_reports] = await Promise.all(['bakar_reports', 'accident_reports'].map(t => db.select(t, { order: 'created_at' }).catch(() => [])));
+  S.data = { orgs, sites, site_orgs, site_people, duties, events, notifications, checkins, notices, signatures, workers, trainings, training_signatures, equipment, inspections, attendance, worker_exemptions, site_inspections, defects, bakar_reports, accident_reports };
   // סנכרון החובות מול הפרופיל של כל אתר (חובה חוזרת שבוצעה פותחת את הבאה)
   for (const s of sites) await syncSite(s, false);
   if (isCloud()) { saveSnap(S.user?.email, S.ctx, S.data); net.offline = false; }
@@ -100,6 +103,7 @@ export const canField = () => visibleSites().some(s => myRoles(s.id).some(r => [
 const NAV = () => [
   ['#/', '◧', isFieldUser() ? 'היום באתר' : 'מה דורש טיפול'],
   ...(!isFieldUser() && canField() ? [['#/field', '⚑', 'היום באתר (שטח)']] : []),
+  ...(showOverview() ? [['#/overview', '▦', 'מבט על כל האתרים']] : []),
   ['#/alerts', '🔔', 'התראות וחריגות', 'alerts'],
   ['#/sites', '▤', 'אתרים'],
   ...(isAdmin() ? [['#/orgs', '◎', 'ארגונים ומשתמשים']] : []),
@@ -157,6 +161,7 @@ export async function render() {
     else if (!route) { view = viewHome(); title = 'מה דורש טיפול'; }
     else if (route === 'field') { view = viewField(a); title = 'היום באתר'; }
     else if (route === 'alerts') { view = viewAlerts(); title = 'התראות וחריגות'; }
+    else if (route === 'overview') { view = viewOverview(); title = 'מבט על כל האתרים'; }
     else if (route === 'sites') { view = viewSites(); title = 'אתרים'; }
     else if (route === 'new-site') { view = viewNewSite(a); title = a ? 'פרופיל משפטי' : 'אתר חדש'; }
     else if (route === 'site') { view = viewSite(a, b || 'overview', c, d); title = siteById(a)?.name || 'אתר'; }

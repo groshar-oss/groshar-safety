@@ -8,7 +8,7 @@ import { TRAINING_KINDS, COUNTS_ANNUAL, age, validIsraeliId, workersOf, training
   heightExemption, canExemptHeight, exemptApprover } from '../workers.js';
 import { pad } from './sign.js';
 import { LANGS, langLabel, langCode, localStatement, reminderText, OK_BTN, SIGN_HERE } from '../langs.js';
-import { waLink } from '../alerts.js';
+import { waLink, waShare } from '../alerts.js';
 import { openFile, fmtDT } from './common.js';
 
 export const canSeeWorkers = siteId => hasRole(siteId, 'con', 'so', 'sm', 'wm', 'rep', 'bakar');
@@ -17,6 +17,42 @@ const today = () => new Date().toISOString().slice(0, 10);
 const ST = { ok: ['green', 'מותר לעבוד'], warn: ['amber', 'פג בקרוב'], bad: ['red', 'אסור להעסיק'], off: ['', 'לא פעיל'] };
 const stChip = st => `<span class="chip ${ST[st.lv][0]}">${ST[st.lv][1]}</span>`;
 const idLabel = w => (w.id_type === 'passport' ? 'דרכון ' : 'ת"ז ') + w.id_number;
+
+// ===== כרטיס חברה (קבלן ראשי או קבלן משנה) =====
+const cmpName = w => (w.company || '').trim() || 'בלי חברה';
+function companyList(s, all) {
+  const act = all.filter(x => x.st.lv !== 'off');
+  const by = {};
+  for (const x of act) (by[cmpName(x.w)] ||= []).push(x);
+  const rows = Object.entries(by).sort((a, b) => b[1].filter(x => x.st.lv === 'bad').length - a[1].filter(x => x.st.lv === 'bad').length || b[1].length - a[1].length);
+  if (rows.length < 1) return '';
+  return `<div class="card"><h2>חברות באתר <span class="mut small">${rows.length}</span></h2>
+    ${rows.map(([c, xs]) => { const bad = xs.filter(x => x.st.lv === 'bad').length, warn = xs.filter(x => x.st.lv === 'warn').length, here = xs.filter(x => isPresent(x.w.id)).length;
+      return `<button type="button" class="wrow" data-cmp="${esc(c)}"><div><b>${esc(c)}</b> <span class="mut small">${xs.length} עובדים · ${here} באתר היום</span>
+        <div>${bad ? `<span class="chip red">${bad} אסור להעסיק</span>` : ''}${warn ? `<span class="chip amber">${warn} פג בקרוב</span>` : ''}${!bad && !warn ? '<span class="chip green">כולם בסדר</span>' : ''}</div></div><span class="go">‹</span></button>`; }).join('')}</div>`;
+}
+function companyCard(s, company) {
+  const xs = workersOf(s.id).filter(w => w.active !== false && cmpName(w) === company).map(w => ({ w, st: workerStatus(w) }));
+  const rank = { bad: 0, warn: 1, ok: 2 };
+  xs.sort((a, b) => rank[a.st.lv] - rank[b.st.lv] || a.w.name.localeCompare(b.w.name, 'he'));
+  const miss = xs.filter(x => x.st.lv === 'bad' || x.st.lv === 'warn');
+  const d30 = xs.reduce((t, x) => t + daysPresent(x.w.id), 0);
+  const trained = xs.filter(x => lastAnnual(x.w)).length;
+  const text = `שלום, מה חסר אצל העובדים של ${company} באתר ${s.name}:\n\n` + miss.map(x => `• ${x.w.name}: ${x.st.issues.join(', ')}`).join('\n')
+    + '\n\nעובד שאסור להעסיק לא נכנס לאתר עד שמשלימים. מביאים את המסמכים למנהל העבודה.';
+  const el = h(`<div class="ov" role="dialog" aria-modal="true"><div class="dlg wide"><div class="dlg-h"><h3>${esc(company)}</h3><button class="x" aria-label="סגירה" data-x>✕</button></div>
+    <div class="dlg-b">
+      <div class="kpis"><div class="kpi"><div class="l">עובדים</div><div class="v">${xs.length}</div></div><div class="kpi"><div class="l">אסור להעסיק</div><div class="v neg">${xs.filter(x => x.st.lv === 'bad').length}</div></div>
+        <div class="kpi"><div class="l">הודרכו</div><div class="v">${trained}/${xs.length}</div></div><div class="kpi"><div class="l">ימי עבודה ב-30 יום</div><div class="v">${d30}</div></div></div>
+      ${miss.length ? `<div class="todo-box"><b>מה חסר</b>${miss.map(x => `<div class="small"><b>${esc(x.w.name)}</b>: ${esc(x.st.issues.join(' · '))}</div>`).join('')}
+        <div class="actions"><a class="btn" target="_blank" rel="noopener" href="${esc(waShare(text))}">📱 שליחת הרשימה בוואטסאפ</a></div></div>` : '<div class="banner">לכל העובדים של החברה יש את כל האישורים 👍</div>'}
+      <div class="wlist">${xs.map(({ w, st }) => `<button type="button" class="wrow lv-${st.lv}" data-w="${w.id}"><div><b>${esc(w.name)}</b> ${stChip(st)}${isPresent(w.id) ? ' <span class="chip blue">באתר היום</span>' : ''}
+        <div class="small mut">${esc(w.trade || '')} · ${daysPresent(w.id)} ימים ב-30 יום</div></div><span class="go">‹</span></button>`).join('')}</div>
+    </div><div class="dlg-f"><button class="btn ghost" data-x>סגירה</button></div></div></div>`);
+  document.body.appendChild(el);
+  $$('[data-x]', el).forEach(b => b.onclick = () => el.remove());
+  $$('[data-w]', el).forEach(b => b.onclick = () => { el.remove(); workerCard(s, b.dataset.w); });
+}
 
 // ===== לשונית עובדים והדרכות =====
 export function tabWorkers(s, c, d) {
@@ -42,12 +78,14 @@ export function tabWorkers(s, c, d) {
         <div><b>${esc(w.name)}</b> ${stChip(st)}${isPresent(w.id) ? ' <span class="chip blue">באתר היום</span>' : ''}${w.foreign_worker ? ' <span class="chip">עובד זר</span>' : ''}
           <div class="small mut">${esc([w.company, w.trade].filter(Boolean).join(' · '))}</div>
           ${st.issues.length && st.lv !== 'off' ? `<div class="small ${st.lv === 'bad' ? 'neg' : ''}">${esc(st.issues.join(' · '))}</div>` : ''}</div><span class="go">‹</span></button>`).join('') || '<div class="empty">עוד לא נרשמו עובדים</div>'}</div></div>
+    ${companyList(s, all)}
     <div class="card"><h2>הדרכות <span class="mut small">${trs.length}</span></h2>
       ${trs.map(t => { const n2 = sigsOfTraining(t.id).length; return `<a class="wrow" href="#/site/${s.id}/workers/training/${t.id}"><div><b>${esc(TRAINING_KINDS[t.kind] || t.kind)}</b> ${t.closed_at ? '<span class="chip green">הסתיימה</span>' : '<span class="chip amber">פתוחה לחתימות</span>'}
         <div class="small mut">${fmtDT(t.held_at)} · ${esc(t.trainer_name)} · ${n2} חתמו</div><div class="small">${esc(t.topic)}</div></div><span class="go">‹</span></a>`; }).join('') || '<div class="empty">עוד לא נרשמו הדרכות</div>'}</div>
   </div>`);
   $('[data-q]', el).addEventListener('input', e => { const q = e.target.value.trim().toLowerCase(); $$('[data-w]', el).forEach(r => r.hidden = q && !r.dataset.txt.includes(q)); });
   $$('[data-w]', el).forEach(b => b.onclick = () => workerCard(s, b.dataset.w));
+  $$('[data-cmp]', el).forEach(b => b.onclick = () => companyCard(s, b.dataset.cmp));
   $('[data-neww]', el)?.addEventListener('click', () => workerForm(s));
   $('[data-newtr]', el)?.addEventListener('click', () => newTraining(s));
   if (c && c !== 'training') el.addEventListener('mounted', () => { if (workersOf(s.id).some(w => w.id === c) && !document.querySelector('.ov')) workerCard(s, c); });
