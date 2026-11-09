@@ -375,3 +375,4 @@ details summary{cursor:pointer;font-size:13px;font-weight:600;margin-top:8px}
 .card.notice h3{margin:0;font-size:15px}.card.notice .dh{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
 .notice .miss{color:#c62828;font-weight:600}.notice .nbody{white-space:pre-line;background:var(--bg2,rgba(127,127,127,.08));border-radius:8px;padding:10px;margin:8px 0}
 .notice .actions{display:flex;flex-wrap:wrap;gap:8px;margin-top:10px}
+.prow.need{border:1px dashed var(--line);border-radius:10px;background:rgba(232,145,45,.06)}

@@ -151,6 +151,10 @@ const sameP = (a, b) => (a.email && b.email && a.email.toLowerCase() === b.email
 const canManage = (s, role) => hasRole(s.id, SIDE_OF_ROLE[role] === 'dev' ? 'dev' : 'con');
 const SIDE_OF_ROLE = { dev: 'dev', bakar: 'dev', viewer: 'dev', con: 'con', rep: 'con', so: 'con', sm: 'con', wm: 'con', fa: 'con', sub: 'con' };
 
+// למה התפקיד נדרש (מוצג בשורה של תפקיד חסר)
+const WHY = { dev: 'מקבל את חובות המזמין והתראות צד היזם', bakar: 'חובה לפני אישור התחלת עבודה (תקנה 1א(א)(3))', con: 'מבצע הבנייה: אחראי לחובות צד הקבלן',
+  wm: 'אסור לעבוד בלי מנהל עבודה רשום (תקנה 2(א)(1))', rep: 'אתר פטור (תקנה 2(ז)): אדם באתר שמבצע את חובות מנהל העבודה, עם צ׳ק-אין יומי',
+  sm: 'אתר של 15,000 מ"ר ומעלה (תקנה 2(א)(2))', so: '100 עובדים ומעלה בו-זמנית (תקנה 4(3) לתקנות הממונים)', fa: 'אחראי ארגז עזרה ראשונה, נמצא באתר כל שעות העבודה (תקנה 187)' };
 function tabPeople(s) {
   const all = S.data.site_people.filter(p => p.site_id === s.id);
   const order = Object.keys(ROLES);
@@ -166,17 +170,21 @@ function tabPeople(s) {
     <div class="plist">${all.map(p => `<div class="prow ${p.active === false ? 'off' : ''}">
       <div><b>${esc(p.name)}</b> ${p.backup ? '<span class="chip">מחליף</span>' : ''}${p.active === false ? '<span class="chip">לא פעיל</span>' : ''}<div class="small mut">${ROLES[p.role] || p.role}${p.license ? ' · ' + esc(p.license) : ''}</div></div>
       <div class="small" dir="ltr">${esc(p.phone || '')}<br>${esc(p.email || '')}</div>
-      <div class="actions">${p.role === 'rep' && p.active !== false ? `<button class="btn small ghost" data-auth="${p.id}">כתב הסמכה</button>` : ''}${canManage(s, p.role) ? `<button class="btn small ghost" data-edit="${p.id}">עריכה</button>` : ''}</div></div>`).join('') || '<div class="empty">עוד לא הוגדרו בעלי תפקידים</div>'}</div></div></div>`);
+      <div class="actions">${p.role === 'rep' && p.active !== false ? `<button class="btn small ghost" data-auth="${p.id}">כתב הסמכה</button>` : ''}${canManage(s, p.role) ? `<button class="btn small ghost" data-edit="${p.id}">עריכה</button>` : ''}</div></div>`).join('')}
+    ${missing.map(([r]) => `<div class="prow need"><div><b>${ROLES[r]}</b> <span class="chip red">חסר</span><div class="small mut">${esc(WHY[r] || '')}</div></div><div></div>
+      <div class="actions">${canManage(s, r) ? `<button class="btn small" data-fill="${r}">השלמה</button>` : `<span class="small mut">ממנה ${SIDE_OF_ROLE[r] === 'dev' ? 'היזם' : 'הקבלן הראשי'}</span>`}</div></div>`).join('')}
+    ${!all.length && !missing.length ? '<div class="empty">עוד לא הוגדרו בעלי תפקידים</div>' : ''}</div></div></div>`);
+  $$('[data-fill]', el).forEach(b => b.onclick = () => personForm(s, null, b.dataset.fill));
   $('[data-add]', el)?.addEventListener('click', () => personForm(s));
   $$('[data-edit]', el).forEach(b => b.onclick = () => personForm(s, all.find(p => p.id === b.dataset.edit)));
   $$('[data-auth]', el).forEach(b => b.onclick = () => authLetter(s, all.find(p => p.id === b.dataset.auth)));
   return el;
 }
 
-async function personForm(s, p = null) {
+async function personForm(s, p = null, preset = null) {
   const allowed = Object.fromEntries(Object.entries(ROLES).filter(([r]) => canManage(s, r) || p?.role === r));
   const v = await modal({ title: p ? 'עריכת בעל תפקיד' : 'הוספת בעל תפקיד', ok: 'שמירה',
-    body: `${select('תפקיד', 'role', allowed, p?.role || Object.keys(allowed)[0])}
+    body: `${select('תפקיד', 'role', allowed, p?.role || preset || Object.keys(allowed)[0])}
       ${field('שם מלא', 'name', p?.name || '', { req: true })}
       <div class="grid g2">${field('טלפון נייד (ל-WhatsApp)', 'phone', p?.phone || '', { type: 'tel', attrs: 'dir="ltr"' })}${field('אימייל', 'email', p?.email || '', { type: 'email', attrs: 'dir="ltr"' })}</div>
       ${field('רישיון / מספר רישום / הכשרה', 'license', p?.license || '', { hint: 'מהנדס: פנקס המהנדסים. מנהל עבודה: מרשם מנהלי עבודה. ממונה: תעודת ממונה. נציג מבצע הבנייה: הכשרה אם יש (למשל קורס מנהלי עבודה). הדין לא מחייב הכשרה, אבל מומלץ.' })}
