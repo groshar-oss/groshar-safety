@@ -316,7 +316,7 @@ tr.sec.pend td{background:#fff4e0;color:#8a5a00}
 .send{border-top:1px dashed var(--line2);margin-top:10px;padding-top:10px}
 .wa-list{display:flex;flex-wrap:wrap;gap:6px;margin:8px 0}
 .btn.wa{background:#1fa855;border-color:#1fa855;color:#fff}.btn.wa.done{background:#13804a}
-.kv{display:grid;grid-template-columns:max-content 1fr;gap:6px 14px;margin:10px 0;font-size:13.5px}
+.kv{display:grid;grid-template-columns:minmax(0,max-content) minmax(42%,1fr);gap:6px 14px;margin:10px 0;font-size:13.5px}
 .kv>span{color:var(--mut)}.kv>b{font-weight:600;min-width:0;overflow-wrap:anywhere}
 .pn{font-size:13px;padding:6px 9px;border-radius:8px;margin-bottom:6px;background:var(--th)}
 .pn.ok{background:var(--g);color:var(--gi)}.pn.warn{background:var(--warn);color:#9a5b00}.pn.na{color:var(--mut)}
