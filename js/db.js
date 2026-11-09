@@ -2,13 +2,14 @@
 import { CONFIG } from './config.js';
 import { store } from './util.js';
 import { demoData } from './demo.js';
+import { queue, flush, isNetErr, looksOffline, localFile, refreshCount } from './offline.js';
 
 const LOCAL_KEY = 'grosher-safety-demo-v1';
 export const uuid = () => (crypto.randomUUID ? crypto.randomUUID() : 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, c => {
   const r = Math.random() * 16 | 0; return (c === 'x' ? r : (r & 3 | 8)).toString(16); }));
 
-const TABLES = ['orgs', 'memberships', 'sites', 'site_orgs', 'site_people', 'duties', 'events', 'notifications', 'files', 'audit_log', 'checkins', 'notices', 'signatures', 'workers', 'trainings', 'training_signatures', 'equipment', 'inspections', 'attendance', 'worker_exemptions', 'site_inspections'];
-const AUDITED = ['orgs', 'memberships', 'sites', 'site_orgs', 'site_people', 'duties', 'events', 'notices', 'workers', 'trainings', 'equipment', 'inspections', 'attendance', 'worker_exemptions', 'site_inspections'];
+const TABLES = ['orgs', 'memberships', 'sites', 'site_orgs', 'site_people', 'duties', 'events', 'notifications', 'files', 'audit_log', 'checkins', 'notices', 'signatures', 'workers', 'trainings', 'training_signatures', 'equipment', 'inspections', 'attendance', 'worker_exemptions', 'site_inspections', 'defects'];
+const AUDITED = ['orgs', 'memberships', 'sites', 'site_orgs', 'site_people', 'duties', 'events', 'notices', 'workers', 'trainings', 'equipment', 'inspections', 'attendance', 'worker_exemptions', 'site_inspections', 'defects'];
 
 function match(row, q = {}) {
   for (const [k, v] of Object.entries(q.eq || {})) if (String(row[k] ?? '') !== String(v ?? '')) return false;
@@ -68,13 +69,14 @@ class LocalDB {
     Object.assign(row, patch); this.audit(table, 'update', row, old); this.save(); return { ...row };
   }
   async remove(table, id) {
-    if (['duties', 'audit_log', 'notifications', 'notices', 'signatures', 'workers', 'trainings', 'training_signatures', 'equipment', 'inspections', 'attendance', 'worker_exemptions', 'site_inspections'].includes(table)) throw new Error('אי אפשר למחוק רשומה זו. אפשר לסגור אותה עם נימוק.');
+    if (['duties', 'audit_log', 'notifications', 'notices', 'signatures', 'workers', 'trainings', 'training_signatures', 'equipment', 'inspections', 'attendance', 'worker_exemptions', 'site_inspections', 'defects'].includes(table)) throw new Error('אי אפשר למחוק רשומה זו. אפשר לסגור אותה עם נימוק.');
     const row = this.data.tables[table].find(r => r.id === id);
     this.data.tables[table] = this.data.tables[table].filter(r => r.id !== id);
     if (row) this.audit(table, 'delete', row, { ...row });
     this.save();
   }
   async signOut() {}
+  async flush() { return 0; }
 }
 
 // קבצים במצב הדגמה: IndexedDB בדפדפן
@@ -91,11 +93,19 @@ class CloudDB {
   async init() {
     const { createClient } = await import('https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/+esm');
     this.recovery = /type=recovery/.test(location.hash);
-    this.sb = createClient(CONFIG.supabaseUrl, CONFIG.supabaseAnonKey, { auth: { persistSession: true } });
+    // קליטה חלשה: בקשה שלא נענית תוך 45 שניות נחשבת כמו בלי קליטה, והפעולה נשמרת בטלפון
+    const tfetch = (u, o = {}) => fetch(u, { ...o, signal: o.signal || (AbortSignal.timeout ? AbortSignal.timeout(45e3) : undefined) });
+    this.sb = createClient(CONFIG.supabaseUrl, CONFIG.supabaseAnonKey, { auth: { persistSession: true }, global: { fetch: tfetch } });
     this.sb.auth.onAuthStateChange(ev => { if (ev === 'PASSWORD_RECOVERY') this.recovery = true; });
-    const { data } = await this.sb.auth.getSession();
+    const { data, error } = await this.sb.auth.getSession().catch(e => ({ data: {}, error: e }));
     if (/access_token|type=/.test(location.hash)) history.replaceState(null, '', location.pathname + location.search + '#/');
-    this.user = data.session?.user ? { id: data.session.user.id, email: data.session.user.email } : null;
+    let u = data?.session?.user;
+    // בלי קליטה אי אפשר לחדש את ההתחברות: ממשיכים עם המשתמש השמור בטלפון, והחידוש יקרה כשחוזרת קליטה
+    if (!u && (looksOffline() || isNetErr(error))) {
+      try { const k = Object.keys(localStorage).find(x => /^sb-.*-auth-token$/.test(x)); u = k ? JSON.parse(localStorage.getItem(k))?.user : null; } catch { u = null; }
+    }
+    this.user = u ? { id: u.id, email: u.email } : null;
+    refreshCount();
     return this.user;
   }
   async signIn(email, password) {
@@ -139,8 +149,35 @@ class CloudDB {
     }
     return all;
   }
+  // כתיבה: אם אין קליטה, נשמר בטלפון ונשלח אחר כך. מחזירים את השורה כאילו נשמרה
   async insert(table, rows) {
-    const arr = Array.isArray(rows) ? rows : [rows];
+    // מזהה נקבע בטלפון, כדי ששליחה חוזרת אחרי ניתוק לא תיצור כפילות
+    const arr = (Array.isArray(rows) ? rows : [rows]).map(r => r.id ? r : { id: uuid(), ...r });
+    if (looksOffline()) return this.queueInsert(table, arr);
+    try { return await this.rawInsert(table, arr); } catch (e) { if (isNetErr(e)) return this.queueInsert(table, arr); throw e; }
+  }
+  async queueInsert(table, arr) {
+    const now = new Date().toISOString();
+    const rows = arr.map(r => ({ id: uuid(), created_at: now, ...r }));
+    await queue({ kind: 'insert', table, rows });
+    return rows.map(r => ({ ...r, _pending: true }));
+  }
+  async update(table, id, patch) {
+    if (looksOffline()) return this.queueUpdate(table, id, patch);
+    try { return await this.rawUpdate(table, id, patch); } catch (e) { if (isNetErr(e)) return this.queueUpdate(table, id, patch); throw e; }
+  }
+  async queueUpdate(table, id, patch) { await queue({ kind: 'update', table, id, patch }); return { id, ...patch, _pending: true }; }
+  async putFile(path, blob) {
+    if (looksOffline()) return queue({ kind: 'file', path, blob });
+    try { return await this.rawPutFile(path, blob); } catch (e) { if (isNetErr(e)) return queue({ kind: 'file', path, blob }); throw e; }
+  }
+  async getFile(path) {
+    const local = await localFile(path); if (local) return local;
+    return this.rawGetFile(path);
+  }
+  // שליחת מה שנשמר בטלפון
+  async flush() { if (!this.user) return 0; return flush({ insert: (t, r) => this.rawInsert(t, r), update: (t, i, p) => this.rawUpdate(t, i, p), putFile: (p, b) => this.rawPutFile(p, b) }); }
+  async rawInsert(table, arr) {
     const out = [];
     for (let i = 0; i < arr.length; i += 500) {
       const { data, error } = await this.sb.from(table).insert(arr.slice(i, i + 500), { defaultToNull: false }).select();
@@ -149,16 +186,16 @@ class CloudDB {
     }
     return out;
   }
-  async update(table, id, patch) {
+  async rawUpdate(table, id, patch) {
     const { data, error } = await this.sb.from(table).update(patch).eq('id', id).select().single();
     if (error) throw dbErr(error); return data;
   }
   async remove(table, id) { const { error } = await this.sb.from(table).delete().eq('id', id); if (error) throw dbErr(error); }
-  async putFile(path, blob) {
+  async rawPutFile(path, blob) {
     const { error } = await this.sb.storage.from('files').upload(path, blob, { contentType: blob.type || 'application/octet-stream', upsert: false });
     if (error) throw dbErr(error);
   }
-  async getFile(path) {
+  async rawGetFile(path) {
     const { data, error } = await this.sb.storage.from('files').download(path);
     if (error) throw dbErr(error); return data;
   }
@@ -176,8 +213,9 @@ export function dbErr(error) {
   else if (error?.code === '23505') he = 'הרשומה כבר קיימת.';
   else if (/role_conflict/.test(m)) he = 'אי אפשר למנות את אותו אדם לשני התפקידים האלה באותו אתר (תקנות 2א(א)(2), 2ב(א)(2)).';
   else if (/no_delete/.test(m)) he = 'אי אפשר למחוק רשומה זו. אפשר לסגור אותה עם נימוק.';
-  const e = new Error(he);
-  if (/Failed to fetch|NetworkError|network|Load failed/i.test(m)) { e.offline = true; e.message = 'אין חיבור לאינטרנט.'; }
+  else if (/^[a-z_0-9]+: .*[א-ת]/.test(m)) he = m.replace(/^[a-z_0-9]+: /, '');
+  const e = new Error(he); e.code = error?.code; e.raw = m;
+  if (/Failed to fetch|NetworkError|network|Load failed|abort|timed? ?out/i.test(m)) { e.offline = true; e.message = 'אין חיבור לאינטרנט.'; }
   return e;
 }
 

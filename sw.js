@@ -1,11 +1,17 @@
-// Service worker: שומר את קבצי המערכת כדי שתיפתח גם בלי קליטה. נתונים תמיד מהרשת.
-const V = 'safety-v15';
-const FILES = ['./', 'index.html', 'css/app.css?v=10', 'js/app.js', 'manifest.json', 'icons/icon-192.png', 'icons/tzi-logo-on-dark.svg', 'icons/tzi-logo-color.svg'];
+// Service worker: שומר את קבצי המערכת כדי שתיפתח גם בלי קליטה. הנתונים נשמרים בנפרד (js/offline.js).
+const V = 'safety-v16';
+const FILES = ['./', 'index.html', 'css/app.css?v=11', 'js/app.js', 'manifest.json', 'icons/icon-192.png', 'icons/tzi-logo-on-dark.svg', 'icons/tzi-logo-color.svg'];
 self.addEventListener('install', e => { e.waitUntil(caches.open(V).then(c => c.addAll(FILES)).then(() => self.skipWaiting())); });
-self.addEventListener('activate', e => { e.waitUntil(caches.keys().then(ks => Promise.all(ks.filter(k => k !== V).map(k => caches.delete(k)))).then(() => self.clients.claim())); });
+self.addEventListener('activate', e => { e.waitUntil(caches.keys().then(ks => Promise.all(ks.filter(k => k !== V && k !== 'tzi-cdn').map(k => caches.delete(k)))).then(() => self.clients.claim())); });
 self.addEventListener('fetch', e => {
   const u = new URL(e.request.url);
-  if (e.request.method !== 'GET' || u.origin !== location.origin) return;
+  if (e.request.method !== 'GET') return;
+  // ספריות מ-CDN (גרסה קבועה) וגופנים: מהמטמון קודם, כדי שהמערכת תיפתח גם בלי קליטה
+  if (/^(cdn\.jsdelivr\.net|fonts\.googleapis\.com|fonts\.gstatic\.com)$/.test(u.hostname)) {
+    e.respondWith(caches.open('tzi-cdn').then(ca => ca.match(e.request).then(hit => hit || fetch(e.request).then(r => { if (r.ok) ca.put(e.request, r.clone()); return r; }))));
+    return;
+  }
+  if (u.origin !== location.origin) return;
   // קודם רשת, ואם אין קליטה מהמטמון
   // no-cache: בודקים מול השרת בכל טעינה (תשובה קצרה 304 אם לא השתנה), כך שעדכון מגיע מיד ולא אחרי 10 דקות
   const net = e.request.mode === 'navigate' ? fetch(e.request) : fetch(e.request, { cache: 'no-cache' });

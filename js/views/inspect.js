@@ -1,4 +1,5 @@
 // ביקורת באתר: מסך אחד שמרכז את כל מה שמבקר רוצה לראות, הודעה לבעלי התפקידים (WhatsApp / מייל) וייצוא PDF
+import { defectsOf, SEV, isLate } from './defects.js';
 import { db } from '../db.js';
 import { S, hasRole, siteOrgs, render } from '../app.js';
 import { derive, ROLES, WORK_TYPES, EVENTS, LEVELS, gateStatus } from '../duties.js';
@@ -55,6 +56,10 @@ function sections(s) {
     out.push({ title: 'הדרכות אחרונות', type: 'table', workers: true, cols: [['מועד', 0.16], ['סוג', 0.24], ['מדריך', 0.18], ['חתמו', 0.08], ['נושא', 0.34]],
       rows: trs.map(t => [fmtDT(t.held_at), TRAINING_KINDS[t.kind] + (t.closed_at ? '' : ' (פתוחה)'), t.trainer_name, String(sigsOfTraining(t.id).length), t.topic]), files: trs.map(t => t.pdf_path), empty: 'לא נרשמו הדרכות' });
   }
+  const dfs = defectsOf(s.id).filter(d => !d.closed_at || Date.now() - new Date(d.closed_at) < 30 * 864e5);
+  out.push({ title: `ליקויי בטיחות (${dfs.filter(d => !d.closed_at).length} פתוחים)`, type: 'table', cols: [['ליקוי', 0.3], ['איפה', 0.16], ['חומרה', 0.11], ['אחראי', 0.17], ['מועד', 0.12], ['מצב', 0.14]],
+    rows: dfs.map(d => [d.title, d.location || '', SEV[d.severity]?.[1] || '', d.responsible || '', fmtDate(d.due_date), d.closed_at ? 'תוקן ' + fmtDate(d.closed_at) : isLate(d) ? 'באיחור' : 'פתוח']),
+    files: dfs.map(d => d.after_path || d.before_path), empty: 'אין ליקויים פתוחים' });
   const eq = equipmentOf(s.id).filter(e => e.active !== false);
   out.push({ title: 'ציוד ותסקירים', type: 'table', cols: [['ציוד', 0.26], ['סוג', 0.22], ['תסקיר אחרון', 0.13], ['בודק', 0.16], ['בתוקף עד', 0.12], ['מצב', 0.11]],
     rows: eq.map(e => { const li = lastInspection(e.id); const bad = !li || li.next_due < today();

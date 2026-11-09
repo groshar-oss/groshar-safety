@@ -196,7 +196,14 @@ function wrap(ctx, text, w) {
     let line = '';
     for (const word of para.split(/\s+/).filter(Boolean)) {
       const t = line ? line + ' ' + word : word;
-      if (ctx.measureText(t).width <= w || !line) line = t; else { out.push(line); line = word; }
+      if (ctx.measureText(t).width <= w) { line = t; continue; }
+      if (ctx.measureText(word).width > w) {
+        // שפות בלי רווחים (סינית, תאית): שוברים לפי תווים
+        const src = (line ? line + ' ' : '') + word; line = '';
+        for (const ch of [...src]) { if (ctx.measureText(line + ch).width > w && line) { out.push(line); line = ch; } else line += ch; }
+        continue;
+      }
+      if (!line) line = t; else { out.push(line); line = word; }
     }
     out.push(line);
   }
@@ -213,7 +220,7 @@ export async function renderPdfPages(blocks, footer = '') {
     pages.push(c); y = M;
   };
   const font = (size, bold = false) => { ctx.font = `${bold ? 'bold ' : ''}${size}px ${FONT}`; };
-  const text = (s, x, yy, { size = 22, bold = false, color = '#111', align = 'right' } = {}) => { font(size, bold); ctx.fillStyle = color; ctx.textAlign = align; ctx.fillText(s, x, yy); };
+  const text = (s, x, yy, { size = 22, bold = false, color = '#111', align = 'right', dir = 'rtl' } = {}) => { font(size, bold); ctx.fillStyle = color; ctx.textAlign = align; ctx.direction = dir; ctx.fillText(s, x, yy); ctx.direction = 'rtl'; };
   const ensure = h => { if (y + h > PH - M - 40) newPage(); };
   newPage();
   for (const b of blocks) {
@@ -259,7 +266,8 @@ export async function renderPdfPages(blocks, footer = '') {
       y += 18;
     } else if (b.type === 'p') {
       const size = b.size || 20; font(size, b.bold);
-      for (const l of wrap(ctx, b.text, PW - 2 * M)) { ensure(size + 10); text(l, PW - M, y, { size, bold: b.bold, color: b.color || '#333' }); y += size + 9; }
+      const ltr = b.dir === 'ltr';
+      for (const l of wrap(ctx, b.text, PW - 2 * M)) { ensure(size + 10); text(l, ltr ? M : PW - M, y, { size, bold: b.bold, color: b.color || '#333', align: ltr ? 'left' : 'right', dir: ltr ? 'ltr' : 'rtl' }); y += size + 9; }
       y += 10;
     } else if (b.type === 'sig' && b.img) {
       ensure(110); const ih = 80, iw = b.img.width * ih / b.img.height; ctx.drawImage(b.img, PW - M - iw, y, iw, ih); y += ih + 14;
@@ -304,4 +312,15 @@ export { loadImg };
 export async function sha256Hex(text) {
   const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(text));
   return [...new Uint8Array(buf)].map(b => b.toString(16).padStart(2, '0')).join('');
+}
+
+// ספירה יומית מול "עובדים מרבי" בפרופיל. מספר העובדים קובע חובות (תוכנית בטיחות מ-50, ממונה בטיחות מ-100)
+export function headcount(s, day = israelDay()) {
+  const present = attendanceOf(s.id, day).filter(a => a.present).length;
+  const max = +s.profile?.workers_max || 0;
+  const msgs = [];
+  if (present > max) msgs.push(`היום באתר ${present} עובדים, יותר מ"עובדים מרבי" בפרופיל המשפטי (${max}). צריך לעדכן את הפרופיל, כי מספר העובדים קובע חובות.`);
+  if (present >= 50 && max < 50) msgs.push('50 עובדים ומעלה: נדרשת תוכנית לניהול הבטיחות במקום תוכנית ארגון בטיחות (תקנה 166).');
+  if (present >= 100 && max < 100) msgs.push('100 עובדים ומעלה: חובה למנות ממונה על הבטיחות.');
+  return { present, max, msgs };
 }

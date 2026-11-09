@@ -113,10 +113,10 @@ export function demoData(uuid) {
   // פנקס עובדים, הדרכות וציוד (דמו). אין צילומים אמיתיים בדמו
   const born = y => new Date(now - y * 365.25 * D).toISOString().slice(0, 10);
   const worker = (site, name, extra = {}) => { const w = { id: uuid(), site_id: site.id, name, id_type: 'il', id_number: '000000018', id_photo_path: `${site.id}/workers/demo/id.jpg`, birth_date: born(30),
-    company: '', trade: '', phone: '', foreign_worker: false, height: false, active: true, added_by_email: 'demo', created_at: at(-24 * 25), ...extra }; T.workers.push(w); return w; };
-  const w1 = worker(s4, 'אחמד חאג׳ (דמו)', { company: con2.name, trade: 'גבס', height: true, height_until: day(9), height_path: `${s4.id}/workers/demo/h.jpg` });
-  const w2 = worker(s4, 'יבגני קוזלוב (דמו)', { company: 'אלקטרו פלוס (קבלן משנה, דמו)', trade: 'חשמל', birth_date: born(41), height: true, height_until: day(400), height_path: `${s4.id}/workers/demo/h2.jpg` });
-  const w3 = worker(s4, 'Somchai Kaew (דמו)', { id_type: 'passport', id_number: 'AA1234567', company: con2.name, trade: 'טיח', foreign_worker: true, nationality: 'תאילנד',
+    company: '', trade: '', phone: '', language: 'he', foreign_worker: false, height: false, active: true, added_by_email: 'demo', created_at: at(-24 * 25), ...extra }; T.workers.push(w); return w; };
+  const w1 = worker(s4, 'אחמד חאג׳ (דמו)', { company: con2.name, trade: 'גבס', phone: '052-0000001', language: 'ar', height: true, height_until: day(9), height_path: `${s4.id}/workers/demo/h.jpg` });
+  const w2 = worker(s4, 'יבגני קוזלוב (דמו)', { company: 'אלקטרו פלוס (קבלן משנה, דמו)', trade: 'חשמל', language: 'ru', birth_date: born(41), height: true, height_until: day(400), height_path: `${s4.id}/workers/demo/h2.jpg` });
+  const w3 = worker(s4, 'Somchai Kaew (דמו)', { id_type: 'passport', id_number: 'AA1234567', company: con2.name, trade: 'טיח', language: 'th', foreign_worker: true, nationality: 'תאילנד',
     entry_date: day(-20), permit_no: '2026-77881', permit_until: day(200), birth_date: born(28) });
   worker(s4, 'דניאל אברהם (דמו)', { company: con2.name, trade: 'צבע', birth_date: born(19), created_at: at(-3) });
   // החרגה מאישור עבודה בגובה (דמו), ונוכחות של אתמול
@@ -135,5 +135,12 @@ export function demoData(uuid) {
   eq(s1, 'lift_machine', 'עגורן צריח', 'TC-118', day(-400), day(25));
   eq(s1, 'lift_gear', 'שרשראות הרמה ומענבים', 'סט 3', day(-170), day(12));
   eq(s4, 'lift_machine', 'במת הרמה מספריים', 'SL-22', day(-60), day(365));
+  // ליקויי בטיחות (דמו). בדמו אין צילומים אמיתיים
+  T.defects ||= [];
+  const df = (site, extra) => T.defects.push({ id: uuid(), site_id: site.id, location: '', severity: 'high', source: 'checkin', responsible: con2.name, before_path: `${site.id}/defects/demo/before.jpg`,
+    after_path: null, fix_note: null, closed_at: null, created_by_email: 'demo', created_at: at(-30), ...extra });
+  df(s4, { title: 'כבל מאריך חשוף ליד לוח החשמל הזמני (דמו)', location: 'קומה 3, חדר טכני', responsible: 'אלקטרו פלוס (קבלן משנה, דמו)', due_date: day(-1), created_at: at(-50) });
+  df(s4, { title: 'סולם בלי רגליות מונעות החלקה (דמו)', location: 'קומה 2', severity: 'normal', due_date: day(5) });
+  df(s4, { title: 'פתח בתקרה בלי גידור (דמו)', location: 'קומה 4, ליד המעלית', severity: 'crit', due_date: day(-3), after_path: `${s4.id}/defects/demo/after.jpg`, fix_note: 'הותקן מעקה זמני ורשת (דמו)', closed_at: at(-60), created_at: at(-80) });
   return T;
 }

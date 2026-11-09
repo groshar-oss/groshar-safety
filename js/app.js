@@ -1,5 +1,6 @@
 // מעטפת המערכת: התחברות, הרשאות, טעינת נתונים, ניווט
 import { db, isCloud } from './db.js';
+import { net, isNetErr, loadSnap, saveSnap, applyPending, failedOps, clearFailed } from './offline.js';
 import { CONFIG } from './config.js';
 import { esc, h, $, $$, toast, store, modal, field } from './util.js';
 import { sync, ROLES, SIDE_OF, responsibleRoles, level } from './duties.js';
@@ -63,12 +64,17 @@ export async function loadAll() {
   // נוכחות, החרגות וביקורות (חבילה 1.6)
   const [attendance, worker_exemptions, site_inspections] = await Promise.all(
     ['attendance', 'worker_exemptions', 'site_inspections'].map(t => db.select(t, { order: 'created_at' }).catch(() => [])));
-  S.data = { orgs, sites, site_orgs, site_people, duties, events, notifications, checkins, notices, signatures, workers, trainings, training_signatures, equipment, inspections, attendance, worker_exemptions, site_inspections };
+  // ליקויי בטיחות (חבילה 1.7)
+  const defects = await db.select('defects', { order: 'created_at' }).catch(() => []);
+  S.data = { orgs, sites, site_orgs, site_people, duties, events, notifications, checkins, notices, signatures, workers, trainings, training_signatures, equipment, inspections, attendance, worker_exemptions, site_inspections, defects };
   // סנכרון החובות מול הפרופיל של כל אתר (חובה חוזרת שבוצעה פותחת את הבאה)
   for (const s of sites) await syncSite(s, false);
+  if (isCloud()) { saveSnap(S.user?.email, S.ctx, S.data); net.offline = false; }
   return S.data;
 }
 export async function syncSite(site, reload = true) {
+  // בלי קליטה לא פותחים חובות חדשות, כדי שלא ייווצרו כפילויות. זה יקרה לבד כשהקליטה תחזור
+  if (net.offline) return false;
   const cur = S.data.duties.filter(d => d.site_id === site.id);
   const { add, upd } = sync(site, cur);
   // חובות תוקף (עובדים וציוד): רק מי שרואה את פנקס העובדים מסנכרן אותן, כדי שמשתמש בלי גישה לא יסגור אותן בטעות
@@ -160,6 +166,8 @@ export async function render() {
   } catch (e) { console.error(e); view = h(`<div class="card"><h2>משהו השתבש</h2><p class="neg">${esc(e.message)}</p></div>`); }
   if (my !== seq) return;
   root.replaceChildren(shell(view, title));
+  root.appendChild(h('<button type="button" class="netpill" id="netpill" hidden></button>'));
+  paintNet();
   wireShell();
   view.dispatchEvent(new Event('mounted'));
 }
@@ -194,9 +202,19 @@ export async function boot() {
     S.user = await db.init();
     if (!S.user) return render();
     if (db.recovery) await newPassword();
-    S.ctx = await db.context();
-    window.__actor = S.ctx.demoRole ? DEMO_ROLES[S.ctx.demoRole] : S.user.email;
-    await loadAll();
+    try {
+      if (isCloud() && navigator.onLine) await db.flush();
+      S.ctx = await db.context();
+      window.__actor = S.ctx.demoRole ? DEMO_ROLES[S.ctx.demoRole] : S.user.email;
+      await loadAll();
+    } catch (e) {
+      // אין קליטה: פותחים עם הנתונים האחרונים שנשמרו בטלפון
+      if (!isCloud() || !(isNetErr(e) || !navigator.onLine)) throw e;
+      const snap = await loadSnap(S.user.email);
+      if (!snap) throw new Error('אין קליטה, ועדיין לא נשמרו נתונים בטלפון הזה. צריך להיכנס פעם אחת כשיש קליטה.');
+      S.ctx = snap.ctx; S.data = await applyPending(snap.data); S.data._fromSnap = true; net.offline = true;
+      window.__actor = S.user.email;
+    }
   } catch (e) {
     console.error(e);
     $('#root').replaceChildren(h(`<div class="login"><div class="box"><h2>לא הצלחנו להתחבר</h2><p class="neg">${esc(e.message)}</p><p class="mut small">צריך לבדוק את הכתובת והמפתח ב-config.js ואת החיבור לאינטרנט.</p></div></div>`));
@@ -205,6 +223,49 @@ export async function boot() {
   await render();
   autoEmail().catch(e => console.warn('email', e));
 }
+
+// ===== קליטה ושליחה של מה שנשמר בטלפון =====
+const hhmm = t => t ? new Date(t).toLocaleTimeString('he-IL', { hour: '2-digit', minute: '2-digit' }) : '';
+function paintNet() {
+  const b = $('#netpill'); if (!b) return;
+  let t = '', cls = '';
+  if (net.syncing) t = `⟳ שולח ${net.pending}…`;
+  else if (net.offline && net.pending) { t = `📴 אין קליטה · ${net.pending} ממתינים לשליחה`; cls = 'warn'; }
+  else if (net.offline) { t = `📴 אין קליטה${net.snapAt ? ' · נתונים מ-' + hhmm(net.snapAt) : ''}`; cls = 'warn'; }
+  else if (net.pending) { t = `⏳ ${net.pending} ממתינים לשליחה · לשלוח עכשיו`; cls = 'warn'; }
+  else if (net.failed) { t = `⚠ ${net.failed} פעולות לא נשלחו · פרטים`; cls = 'bad'; }
+  b.textContent = t; b.hidden = !t; b.className = 'netpill ' + cls;
+  b.onclick = async () => {
+    if (net.failed && !net.pending) return showFailed();
+    await syncNow(true);
+  };
+}
+async function showFailed() {
+  const f = await failedOps();
+  const T = { insert: 'רישום', update: 'עדכון', file: 'קובץ' };
+  const ok = await modal({ title: 'פעולות שהשרת לא קיבל', ok: 'הבנתי, להסיר מהרשימה', cancel: 'סגירה',
+    body: `<p class="small">הפעולות האלה נשמרו בטלפון בלי קליטה, אבל כשחזרה הקליטה השרת דחה אותן (למשל בגלל הרשאה או זמן). צריך לבצע אותן שוב.</p>
+      <div class="att">${f.map(o => `<div class="arow"><div><b>${esc(T[o.kind] || o.kind)} · ${esc(o.table || o.path || '')}</b><div class="small mut">${esc(new Date(o.at).toLocaleString('he-IL'))}</div><div class="small neg">${esc(o.error || '')}</div></div></div>`).join('')}</div>` });
+  if (ok) { await clearFailed(); paintNet(); }
+}
+window.addEventListener('outbox', e => {
+  if (e.detail.queued) toast('נשמר בטלפון. יישלח לבד כשתחזור קליטה');
+  paintNet();
+});
+export async function syncNow(manual = false) {
+  if (!isCloud() || !S.user || net.syncing) return;
+  const before = net.pending;
+  const n = await db.flush().catch(() => 0);
+  if (manual && !n && before) toast('עדיין אין קליטה. ננסה שוב לבד.', 'bad');
+  if (n || net.offline === false && S.data?._fromSnap) {
+    try { S.ctx = await db.context(); await loadAll(); } catch (e) { if (!isNetErr(e)) console.warn(e); return; }
+    if (n) toast(`נשלחו ${n} פעולות שנשמרו בטלפון`);
+    if (!document.querySelector('.ov')) render(); else paintNet();
+  }
+}
+window.addEventListener('online', () => { net.offline = false; paintNet(); syncNow(); });
+window.addEventListener('offline', () => { net.offline = true; paintNet(); });
+setInterval(() => { if (net.pending || net.offline) syncNow(); }, 45e3);
 
 export { level };
 const theme = store('safety-theme'); if (theme) document.documentElement.dataset.theme = theme;

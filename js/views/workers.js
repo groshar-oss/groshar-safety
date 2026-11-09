@@ -7,6 +7,8 @@ import { TRAINING_KINDS, COUNTS_ANNUAL, age, validIsraeliId, workersOf, training
   putWorkerFile, renderPdfPages, pagesToPdf, loadImg, sha256Hex, israelDay, attendanceOf, isPresent, daysPresent, lastAttendanceDay,
   heightExemption, canExemptHeight, exemptApprover } from '../workers.js';
 import { pad } from './sign.js';
+import { LANGS, langLabel, langCode, localStatement, reminderText, OK_BTN, SIGN_HERE } from '../langs.js';
+import { waLink } from '../alerts.js';
 import { openFile, fmtDT } from './common.js';
 
 export const canSeeWorkers = siteId => hasRole(siteId, 'con', 'so', 'sm', 'wm', 'rep', 'bakar');
@@ -64,7 +66,8 @@ export async function workerForm(s, w = null, { after } = {}) {
         ${fileField('צילום התעודה' + (w?.id_photo_path ? ' (קיים. אפשר להחליף)' : ''), 'id_photo', { req: !w?.id_photo_path })}</div>
       <div class="grid g2">${field('חברה (קבלן ראשי או קבלן משנה)', 'company', w?.company || '', { attrs: 'list="cmpList"' })}${field('מקצוע', 'trade', w?.trade || '')}</div>
       <datalist id="cmpList">${[...new Set([...(S.data.site_orgs.filter(x => x.site_id === s.id).map(x => S.data.orgs.find(o => o.id === x.org_id)?.name)), ...workersOf(s.id).map(x => x.company)].filter(Boolean))].map(c => `<option value="${esc(c)}">`).join('')}</datalist>
-      ${field('טלפון', 'phone', w?.phone || '', { type: 'tel', attrs: 'dir="ltr"' })}
+      <div class="grid g2">${field('טלפון', 'phone', w?.phone || '', { type: 'tel', attrs: 'dir="ltr"' })}
+        ${select('השפה שהעובד מבין', 'language', Object.fromEntries(Object.entries(LANGS).map(([k, v]) => [k, v.he])), w?.language || 'he')}</div>
       <label class="chk"><input type="checkbox" name="foreign_worker" ${w?.foreign_worker ? 'checked' : ''}> עובד זר</label>
       <div class="sub-f" data-for="foreign_worker">
         <div class="grid g2">${field('אזרחות', 'nationality', w?.nationality || '')}${field('תאריך כניסה ראשונה לישראל', 'entry_date', w?.entry_date || '', { type: 'date', req: true })}</div>
@@ -111,7 +114,7 @@ export async function workerForm(s, w = null, { after } = {}) {
   if (!v) return;
   const wid = w?.id || uuid();
   const row = { site_id: s.id, name: v.name.trim(), id_type: v.id_type, id_number: normId(v.id_type, v.id_number), birth_date: v.birth_date,
-    company: v.company.trim(), trade: v.trade.trim(), phone: v.phone.trim(), foreign_worker: !!v.foreign_worker,
+    company: v.company.trim(), trade: v.trade.trim(), phone: v.phone.trim(), language: v.language || 'he', foreign_worker: !!v.foreign_worker,
     nationality: v.foreign_worker ? v.nationality.trim() : null, entry_date: v.foreign_worker ? v.entry_date || null : null,
     permit_no: v.foreign_worker ? v.permit_no.trim() : null, permit_until: v.foreign_worker ? v.permit_until || null : null,
     f8_date: v.foreign_worker ? v.f8_date || null : null, f8_institution: v.foreign_worker ? v.f8_institution.trim() || null : null,
@@ -140,6 +143,11 @@ function workerCard(s, wid) {
   const st = workerStatus(w), la = lastAnnual(w), hx = heightExemption(w), canX = canExemptHeight(s.id), reg = canRegister(s.id);
   const sigs = sigsOfWorker(w.id).sort((a, b) => String(b.signed_at).localeCompare(String(a.signed_at)));
   const tr = id => (S.data.trainings || []).find(t => t.id === id);
+  // תזכורת 14 יום לפני שאישור הגובה או היתר העבודה פגים (רק אם יש לעובד טלפון)
+  const in14 = d => d && new Date(d) - Date.now() <= 14 * 864e5 && new Date(d) >= new Date(today());
+  const remind = !w.phone || w.active === false ? [] : [
+    ...(w.height && !hx && in14(w.height_until) ? [{ kind: 'height', label: 'אישור עבודה בגובה', date: fmtDate(w.height_until) }] : []),
+    ...(w.foreign_worker && in14(w.permit_until) ? [{ kind: 'permit', label: 'היתר עבודה', date: fmtDate(w.permit_until) }] : [])];
   const el = h(`<div class="ov" role="dialog" aria-modal="true"><div class="dlg wide"><div class="dlg-h"><h3>${esc(w.name)}</h3><button class="x" aria-label="סגירה" data-x>✕</button></div>
     <div class="dlg-b">
       <div class="dh">${stChip(st)}${isPresent(w.id) ? '<span class="chip blue">באתר היום</span>' : ''}${w.foreign_worker ? '<span class="chip">עובד זר</span>' : ''}</div>
@@ -149,6 +157,7 @@ function workerCard(s, wid) {
         <span>גיל</span><b>${age(w.birth_date) ?? ''} (נולד ${esc(fmtDate(w.birth_date))})</b>
         <span>חברה</span><b>${esc(w.company || '—')}</b><span>מקצוע</span><b>${esc(w.trade || '—')}</b>
         ${w.phone ? `<span>טלפון</span><b dir="ltr" style="text-align:right">${esc(w.phone)}</b>` : ''}
+        <span>שפה</span><b>${esc(langLabel(w.language || 'he'))}</b>
         <span>הדרכה פרונטלית אחרונה</span><b>${la ? fmtDT(la) + ' · הבאה עד ' + fmtDate(new Date(new Date(la).getTime() + 365 * 864e5)) : '<span class="neg">לא הודרך</span>'}</b>
         <span>אישור עבודה בגובה</span><b>${hx ? `הוחרג באישור ${esc(hx.approver_name || hx.approved_by_email || '')} · ${fmtDT(hx.created_at)}<br><span class="small">${esc(hx.reason)}</span>` : w.height ? `עד ${esc(fmtDate(w.height_until))}` : '<span class="neg">אין אישור. אסור להעסיק</span>'}</b>
         <span>נוכחות</span><b>${isPresent(w.id) ? 'באתר היום' : 'לא סומן היום'} · ${daysPresent(w.id)} ימים ב-30 הימים האחרונים</b>
@@ -156,6 +165,8 @@ function workerCard(s, wid) {
           <span>היתר</span><b>${esc(w.permit_no || '')} · עד ${esc(fmtDate(w.permit_until))}</b>
           <span>הדרכת 8 שעות</span><b>${w.f8_date ? esc(fmtDate(w.f8_date) + ' · ' + (w.f8_institution || '')) : `<span class="neg">לא הוזנה. עד ${esc(fmtDate(new Date(new Date(w.entry_date).getTime() + 30 * 864e5)))}</span>`}</b>` : ''}
         <span>נרשם</span><b>${fmtDT(w.created_at)} · ${esc(w.added_by_email || '')}</b></div>
+      ${remind.length ? `<div class="todo-box"><b>תזכורת לעובד</b><div class="small">${remind.map(r => `${esc(r.label)} פג ב-${esc(r.date)}`).join(' · ')}. נשלחת לעובד בוואטסאפ, בעברית ובשפה שלו.</div>
+        <div class="actions">${remind.map(r => `<a class="btn small" target="_blank" rel="noopener" href="${esc(waLink(w.phone, reminderText(w.language, r.kind, { name: w.name, date: r.date, site: s.name })))}">📱 תזכורת: ${esc(r.label)}</a>`).join('')}</div></div>` : ''}
       ${w.active !== false && (reg || canX) ? `<div class="actions">${reg && !hx ? `<button type="button" class="btn" data-hcert>📷 ${w.height ? 'חידוש' : 'צירוף'} אישור עבודה בגובה</button>` : ''}
         ${canX && !hx && !w.height ? '<button type="button" class="btn ghost" data-hx>החרגה מאישור עבודה בגובה</button>' : ''}
         ${canX && hx ? '<button type="button" class="btn ghost" data-hxc>ביטול ההחרגה</button>' : ''}</div>
@@ -281,7 +292,7 @@ export async function newTraining(s) {
     body: `${select('סוג ההדרכה', 'kind', TRAINING_KINDS, 'intro')}
       ${area('נושא ותוכן ההדרכה', 'topic', TOPIC.intro)}
       <div class="grid g2">${field('שם המדריך', 'trainer_name', me?.name?.replace(/ \(.*\)$/, '') || '', { req: true })}${field('תפקיד וכשירות המדריך', 'trainer_title', me ? (me.role === 'rep' ? 'נציג מבצע הבנייה' : 'מנהל עבודה') + (me.license ? ', ' + me.license : '') : '')}</div>
-      ${field('שפת ההדרכה', 'language', 'עברית')}
+      ${select('שפת ההדרכה', 'language', Object.fromEntries(Object.values(LANGS).map(v => [v.he, v.he])), 'עברית')}
       <p class="small mut">ההדרכה באתר בנייה פנים אל פנים, בשפה שהעובד מבין, בידי בעל מקצוע מתאים. אחרי הפתיחה כל עובד חותם בטלפון, וה-PDF נשמר לבד אחרי כל חתימה.</p>`,
     onMount: el => $('[name=kind]', el).addEventListener('change', e => { const t = $('[name=topic]', el); if (!t.value.trim() || Object.values(TOPIC).includes(t.value)) t.value = TOPIC[e.target.value] || ''; }),
     validate: d => !d.topic?.trim() ? 'צריך נושא' : !d.trainer_name?.trim() ? 'צריך שם מדריך' : null });
@@ -330,12 +341,16 @@ function signWorker(s, t, wid) {
   const st = workerStatus(w);
   if (age(w.birth_date) < 18) return toast('אסור להעסיק עובד מתחת לגיל 18', 'bad');
   const text = statement(s, t, w);
+  const lang = w.language && w.language !== 'he' && LANGS[w.language] ? w.language : null;
+  const local = lang ? localStatement(lang, { name: w.name, idType: w.id_type, id: w.id_number, kind: t.kind, site: s.name, trainer: t.trainer_name, trainingLang: t.language }) : null;
   const el = h(`<div class="ov full" role="dialog" aria-modal="true"><div class="dlg signdlg"><div class="dlg-h"><h3>חתימה על קבלת הדרכה</h3><button class="x" aria-label="סגירה" data-x>✕</button></div>
     <div class="dlg-b"><div class="signname">${esc(w.name)}</div>
       ${st.lv === 'bad' && !st.issues.every(x => /לא הודרך|הדרכה שנתית/.test(x)) ? `<div class="banner crit">${esc(st.issues.join(' · '))}</div>` : ''}
+      ${langCode(t.language) && langCode(t.language) !== (w.language || 'he') ? `<div class="banner">ההדרכה ניתנה ב${esc(t.language)}, והעובד מבין ${esc(langLabel(w.language || 'he'))}. מחתימים רק אם ההדרכה הוסברה לו בשפה שלו (למשל בעזרת מתורגמן).</div>` : ''}
+      ${local ? `<p class="signtext local" dir="${LANGS[lang].dir}" lang="${lang}">${esc(local)}</p><div class="small mut">הנוסח בעברית:</div>` : ''}
       <p class="signtext">${esc(text)}</p>
       <canvas class="sgpad tall" aria-label="משטח חתימה"></canvas>
-      <div class="actions"><button type="button" class="btn ghost" data-clear>ניקוי</button><button type="button" class="btn big" data-ok>אישור וחתימה</button></div></div></div></div>`);
+      <div class="actions"><button type="button" class="btn ghost" data-clear>ניקוי ${lang ? '· ' + esc(SIGN_HERE[lang]) : ''}</button><button type="button" class="btn big" data-ok>אישור וחתימה${lang ? ' · ' + esc(OK_BTN[lang]) : ''}</button></div></div></div></div>`);
   document.body.appendChild(el);
   const p = pad($('canvas', el));
   const close = () => el.remove();
@@ -346,6 +361,7 @@ function signWorker(s, t, wid) {
     e.target.disabled = true;
     try {
       const [g] = await db.insert('training_signatures', { training_id: t.id, site_id: s.id, worker_id: w.id, worker_name: w.name, statement: text, image: p.png(),
+        ...(local ? { statement_local: local, lang } : {}), client_signed_at: new Date().toISOString(),
         user_agent: navigator.userAgent.slice(0, 300), signed_by_email: S.user?.email || '', signed_at: new Date().toISOString() });
       (S.data.training_signatures ||= []).push(g);
       close(); toast(`${w.name} חתם`);
@@ -388,8 +404,10 @@ export async function trainingPdf(s, t, sigs, at, hash) {
       ['מועד', fmtDT(t.held_at)], ['המדריך', t.trainer_name + (t.trainer_title ? ', ' + t.trainer_title : '')], ['שפת ההדרכה', t.language || '—']] },
     { type: 'table', cols: [{ h: '#', w: 0.05 }, { h: 'שם העובד', w: 0.2 }, { h: 'תעודה', w: 0.16 }, { h: 'חברה · מקצוע', w: 0.21 }, { h: 'חתימה', w: 0.2 }, { h: 'מועד החתימה', w: 0.18 }],
       rows: sigs.map((g, i) => { const w = ws.get(g.worker_id) || {}; return [String(i + 1), g.worker_name, w.id_number ? (w.id_type === 'passport' ? 'דרכון ' : 'ת"ז ') + w.id_number : '',
-        [w.company, w.trade].filter(Boolean).join(' · '), imgs[i] ? { img: imgs[i] } : '', fmtDT(g.signed_at)]; }) },
-    { type: 'p', text: 'מועד החתימה לפי שעון השרת. כל עובד אישר בחתימתו שקיבל את ההדרכה פנים אל פנים, בשפה שהוא מבין, ושהבין אותה. נוסח האישור המלא של כל עובד שמור במערכת.', size: 18 }
+        [w.company, w.trade].filter(Boolean).join(' · '), imgs[i] ? { img: imgs[i] } : '', sigTime(g)]; }) },
+    ...sigs.filter(g => g.statement_local).flatMap(g => [{ type: 'p', text: `${g.worker_name}: הנוסח שעליו חתם בשפתו (${langLabel(g.lang)})`, bold: true, size: 18, color: '#111' },
+      { type: 'p', text: g.statement_local, size: 18, dir: LANGS[g.lang]?.dir === 'ltr' ? 'ltr' : 'rtl' }]),
+    { type: 'p', text: 'מועד החתימה לפי שעון השרת. חתימה שנעשתה בלי קליטה מציגה גם את שעת הטלפון. כל עובד אישר בחתימתו שקיבל את ההדרכה פנים אל פנים, בשפה שהוא מבין, ושהבין אותה. נוסח האישור המלא של כל עובד שמור במערכת.', size: 18 }
   ];
   if (t.trainer_sig) blocks.push({ type: 'p', text: `הצהרת המדריך: העברתי את ההדרכה פנים אל פנים, בשפה שהעובדים מבינים. ${t.trainer_name}`, bold: true, size: 20, color: '#111' }, { type: 'sig', img: await loadImg(t.trainer_sig) });
   else blocks.push({ type: 'p', text: 'ההדרכה עוד פתוחה. המסמך מתעדכן לבד עם כל חתימה, ובסיום עם חתימת המדריך.', bold: true, color: '#b00020' });
@@ -397,6 +415,9 @@ export async function trainingPdf(s, t, sigs, at, hash) {
     { type: 'p', size: 15, color: '#666', text: 'טביעת אצבע (SHA-256) של רשימת החתימות: ' + hash });
   return pagesToPdf(await renderPdfPages(blocks, `${s.name} · ${TRAINING_KINDS[t.kind]} · ${fmtDT(t.held_at)}`));
 }
+// שעת החתימה: לפי השרת. אם נחתם בלי קליטה ונשלח מאוחר, מציגים גם את שעת הטלפון
+const sigTime = g => g.client_signed_at && g.signed_at && Math.abs(new Date(g.signed_at) - new Date(g.client_signed_at)) > 5 * 6e4
+  ? `${fmtDT(g.client_signed_at)} (בלי קליטה. התקבל ${fmtDT(g.signed_at)})` : fmtDT(g.signed_at || g.client_signed_at);
 async function savePdf(s, t) {
   const sigs = sigsOfTraining(t.id);
   if (!sigs.length) return;

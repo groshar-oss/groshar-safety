@@ -429,3 +429,14 @@ details summary{cursor:pointer;font-size:13px;font-weight:600;margin-top:8px}
 :root[data-theme=dark] .todo-box{background:#1d2a3a;border-color:#2e4560}:root[data-theme=dark] .todo-box>b,:root[data-theme=dark] .duty .dtodo b{color:#9fc1e6}
 @media (prefers-color-scheme:dark){:root:not([data-theme=light]) .todo-box{background:#1d2a3a;border-color:#2e4560}:root:not([data-theme=light]) .todo-box>b,:root:not([data-theme=light]) .duty .dtodo b{color:#9fc1e6}}
 @media (max-width:700px){.itbl thead{display:none}.itbl,.itbl tbody{display:block}.itbl tr{display:block;border:1px solid var(--line);border-radius:10px;margin-bottom:8px;padding:6px 4px}.itbl td{display:flex;gap:10px;border:0;padding:3px 6px;min-width:0!important}.itbl td::before{content:attr(data-l);color:var(--mut);font-weight:600;font-size:12px;min-width:92px;flex:none}.itbl td:empty{display:none}}
+/* קליטה: תווית קבועה עם מה שממתין לשליחה */
+.netpill{position:fixed;top:64px;left:50%;transform:translateX(-50%);z-index:55;white-space:nowrap;border:0;border-radius:999px;padding:9px 16px;font:inherit;font-size:14px;font-weight:600;background:var(--navy);color:#fff;box-shadow:0 4px 14px rgba(0,0,0,.25);cursor:pointer;max-width:calc(100vw - 28px)}
+.netpill.warn{background:#9a5b00}.netpill.bad{background:#a01818}
+.pend{display:inline-block;font-size:12px;color:#9a5b00;font-weight:600}
+/* ליקויים: צילום לפני ואחרי */
+.dpics{display:flex;gap:8px;margin-top:6px;flex-wrap:wrap}
+.dpic{margin:0;width:110px}.dpic img{width:110px;height:82px;object-fit:cover;border-radius:8px;border:1px solid var(--line,#ddd);background:#f3f4f6;display:block}
+.dpic figcaption{font-size:12px;color:#666;text-align:center}
+.wrow.defect{flex-direction:column;align-items:stretch}.wrow.defect .actions{justify-content:flex-start}
+.noimg{width:110px;height:82px;border-radius:8px;background:#eef0f3;display:flex;align-items:center;justify-content:center;font-size:26px;color:#99a}.wrow.lv-bad{border-inline-start:4px solid #c62828}
+@media (min-width:761px){.netpill{top:14px}}

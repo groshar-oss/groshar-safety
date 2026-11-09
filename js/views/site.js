@@ -13,14 +13,15 @@ import { tabWorkers, canSeeWorkers } from './workers.js';
 import { tabEquipment } from './equipment.js';
 import { tabRecurring } from './recurring.js';
 import { tabInspect, canInspect } from './inspect.js';
-import { TRAINING_KINDS, sigsOfTraining, equipmentOf } from '../workers.js';
+import { tabDefects, defectSummary, defectsOf, SEV } from './defects.js';
+import { TRAINING_KINDS, sigsOfTraining, equipmentOf, headcount, renderPdfPages, pagesToPdf } from '../workers.js';
 
-const TABS = [['overview', 'סקירה'], ['recurring', 'משימות חוזרות'], ['workers', 'עובדים והדרכות'], ['equipment', 'ציוד ותסקירים'], ['duties', 'חובות'], ['events', 'אירועים'], ['people', 'בעלי תפקידים'], ['log', 'פנקס כללי'], ['audit', 'יומן ביקורת']];
+const TABS = [['overview', 'סקירה'], ['recurring', 'משימות חוזרות'], ['workers', 'עובדים והדרכות'], ['equipment', 'ציוד ותסקירים'], ['defects', 'ליקויים'], ['duties', 'חובות'], ['events', 'אירועים'], ['people', 'בעלי תפקידים'], ['log', 'פנקס כללי'], ['audit', 'יומן ביקורת']];
 
 export function viewSite(id, tab = 'overview', c, d) {
   const s = siteById(id);
   if (!s || !myRoles(id).length) return h('<div class="card empty">האתר לא נמצא או שאין לך גישה אליו</div>');
-  const body = tab === 'inspect' ? tabInspect(s) : tab === 'workers' ? tabWorkers(s, c, d) : tab === 'equipment' ? tabEquipment(s, c) : tab === 'recurring' ? tabRecurring(s) : tab === 'duties' ? tabDuties(s, c) : tab === 'events' ? tabEvents(s) : tab === 'people' ? tabPeople(s) : tab === 'audit' ? tabAudit(s) : tab === 'log' ? tabLog(s) : tabOverview(s);
+  const body = tab === 'inspect' ? tabInspect(s) : tab === 'workers' ? tabWorkers(s, c, d) : tab === 'equipment' ? tabEquipment(s, c) : tab === 'defects' ? tabDefects(s, c) : tab === 'recurring' ? tabRecurring(s) : tab === 'duties' ? tabDuties(s, c) : tab === 'events' ? tabEvents(s) : tab === 'people' ? tabPeople(s) : tab === 'audit' ? tabAudit(s) : tab === 'log' ? tabLog(s) : tabOverview(s);
   const el = h(`<div><div class="top"><div><h1>${esc(s.name)}</h1><div class="sub">${esc(s.address || '')} · ${esc(WORK_TYPES[s.profile?.work_type] || '')} · <span class="chip">${esc(statusName(s.status))}</span></div></div>
     <div class="actions">${canInspect(s.id) ? `<a class="btn ${tab === 'inspect' ? '' : 'ghost'}" href="#/site/${s.id}/inspect">ביקורת באתר</a>` : ''}${canReport(s.id) ? '<button class="btn" data-ev>דיווח אירוע</button>' : ''}<button class="btn ghost" data-sign>שלט אתר</button>${hasRole(s.id, 'dev') ? `<a class="btn ghost" href="#/new-site/${s.id}">פרופיל משפטי</a>` : ''}</div></div>
     <nav class="tabs">${TABS.filter(([k]) => k !== 'workers' || canSeeWorkers(s.id)).map(([k, l]) => `<a href="#/site/${s.id}/${k}" class="${k === tab ? 'on' : ''}">${l}</a>`).join('')}</nav>
@@ -51,6 +52,7 @@ function tabOverview(s) {
   const el = h(`<div>
     ${dv.clientDuties && !people.some(p => p.role === 'bakar') ? `<div class="banner crit">⛔ אין בקר בטיחות ממונה. כל עוד לא מונה, חובות הבקר חלות על היזם (תקנה 1א(ב)).<div class="actions"><a class="btn small" href="#/site/${s.id}/people">רישום בקר בטיחות</a></div></div>` : ''}
     ${wmBanner(s)}
+    ${hcBanner(s)}
     ${checkinCard(s)}
     ${dv.devIsExecutor ? '<div class="banner crit">יש באתר יותר מקבלן ראשי אחד ואף אחד מהם לא קיבל אחריות כוללת בכתב: היזם הוא מבצע הבנייה (תקנה 6(ג)).</div>' : ''}
     <div class="kpis">
@@ -63,6 +65,7 @@ function tabOverview(s) {
       ${s.status === 'planning' || g.missing.length ? `<div class="card gate"><h2>שער התחלת עבודה <span class="mut small">${g.items.length - g.missing.length} מתוך ${g.items.length}</span></h2>
         <p class="small mut">לפי תקנה 1א(א), המזמין מאשר בכתב להתחיל בעבודות רק אחרי שכל התנאים התקיימו.</p>
         ${g.items.map(i => `<a class="gi ${i.status === 'open' ? 'no' : 'yes'}" href="#/site/${s.id}/duties/${i.id}">${i.status === 'open' ? '✗' : '✓'} ${esc(i.title)} <span class="mut small">${esc(sideName(i.side))}</span></a>`).join('')}</div>` : ''}
+      ${defCard(s)}
       <div class="card"><h2>חריגות פתוחות <span class="mut small">${ex.length}</span></h2>
         ${ex.length ? ex.slice(0, 15).map(x => dutyCard(x.duty)).join('') + (ex.length > 15 ? `<a class="btn ghost small" href="#/site/${s.id}/duties">כל החובות</a>` : '') : '<div class="empty">אין חריגות פתוחות 👍</div>'}</div>
     </div><div>
@@ -74,6 +77,17 @@ function tabOverview(s) {
         <div class="kv small"><span>שטח לפי ההיתר</span><b>${(+s.profile?.area || 0).toLocaleString('he-IL')} מ"ר</b><span>עובדים מרבי</span><b>${+s.profile?.workers_max || 0}</b><span>מועד התחלה</span><b>${fmtDate(s.profile?.start_date)}</b><span>היתר</span><b>${esc(s.profile?.permit_no || '—')}</b></div></div>
     </div></div></div>`);
   return el;
+}
+
+export function hcBanner(s) {
+  const hc = headcount(s);
+  return hc.msgs.length ? `<div class="banner">${hc.msgs.map(esc).join('<br>')}${hasRole(s.id, 'dev') ? `<div class="actions"><a class="btn small" href="#/new-site/${s.id}">עדכון הפרופיל המשפטי</a></div>` : ''}</div>` : '';
+}
+export function defCard(s) {
+  const d = defectSummary(s.id);
+  if (!d.open) return '';
+  return `<a class="card fsum" href="#/site/${s.id}/defects"><h2>ליקויי בטיחות פתוחים <span class="mut small">${d.open}</span></h2>
+    <div>${d.crit ? `<span class="chip red">${d.crit} סיכון מיידי</span>` : ''}${d.late ? `<span class="chip red">${d.late} באיחור</span>` : ''}${!d.crit && !d.late ? '<span class="chip amber">בטיפול</span>' : ''}</div></a>`;
 }
 
 // באנר לאתר פטור ממינוי מנהל עבודה (תקנה 2(ז)): מי מבצע בפועל את חובות מנהל העבודה
@@ -230,8 +244,8 @@ async function personForm(s, p = null, preset = null) {
 }
 
 // ===== פנקס כללי: רישומי בדיקות, צ'ק-אין, מינויים ודיווחים (תקנה 2(ט)) =====
-function tabLog(s) {
-  const items = [
+function logItems(s) {
+  return [
     ...checkinsFor(s.id).map(c => ({ at: c.at, kind: "צ'ק-אין והשגחה באתר", who: `${c.person_name}${c.role === 'rep' ? ' · נציג מבצע הבנייה, מטעם מבצע הבנייה' : ' · ' + (ROLES[c.role] || '')}${c.backup ? ' (ממלא מקום)' : ''}`,
       text: [c.note, ...Object.values(c.checks || {}).map(k => `${k.title}: ${k.ok ? 'תקין' : 'ליקויים. ' + k.note}`)].filter(Boolean).join('\n'), geo: c.lat ? `${c.lat}, ${c.lng}` : '' })),
     ...S.data.duties.filter(d => d.site_id === s.id && d.status === 'done' && d.key !== 'daily_checkin').map(d => ({ at: d.done_at, kind: d.title, who: d.done_by || '', text: [d.evidence_note, d.evidence_ref].filter(Boolean).join(' · '), ref: d.ref })),
@@ -245,13 +259,44 @@ function tabLog(s) {
     ...(canSeeWorkers(s.id) ? Object.entries((S.data.attendance || []).filter(a => a.site_id === s.id && a.present).reduce((m, a) => { (m[a.day] ||= []).push(a.worker_id); return m; }, {}))
       .map(([day, ids]) => ({ at: day + 'T06:00:00', kind: `נוכחות: ${ids.length} עובדים באתר`, who: '', text: ids.map(id => (S.data.workers || []).find(w => w.id === id)?.name || '').filter(Boolean).join(', ') })) : []),
     ...(S.data.notices || []).filter(n => n.site_id === s.id && n.status === 'sent').map(n => ({ at: n.sent_at, kind: 'הודעה רשמית: ' + n.title, who: `${n.sent_by || ''} · אושרה בידי ${n.approved_by || ''}`,
-      text: [n.channel === 'email' ? 'אל: ' + (n.to_list || []).map(p => p.name).join(', ') : '', n.sent_ref ? 'אסמכתה: ' + n.sent_ref : '', n.channel === 'gov' ? (n.fields || []).map(([k, v]) => k + ': ' + (v || '')).join('\n') : n.body].filter(Boolean).join('\n') }))
+      text: [n.channel === 'email' ? 'אל: ' + (n.to_list || []).map(p => p.name).join(', ') : '', n.sent_ref ? 'אסמכתה: ' + n.sent_ref : '', n.channel === 'gov' ? (n.fields || []).map(([k, v]) => k + ': ' + (v || '')).join('\n') : n.body].filter(Boolean).join('\n') })),
+    ...defectsOf(s.id).flatMap(d => [{ at: d.created_at, kind: 'ליקוי בטיחות: ' + d.title, who: d.created_by_email || '', text: [d.location, SEV[d.severity]?.[1], 'אחראי: ' + (d.responsible || ''), 'לתקן עד ' + fmtDate(d.due_date)].filter(Boolean).join(' · ') },
+      ...(d.closed_at ? [{ at: d.closed_at, kind: 'ליקוי תוקן: ' + d.title, who: d.closed_by_email || '', text: d.fix_note || '' }] : [])])
   ].sort((a, b) => String(b.at).localeCompare(String(a.at)));
+}
+function tabLog(s) {
+  const items = logItems(s);
   const el = h(`<div class="card"><div class="dh"><h2>פנקס כללי</h2><button class="btn small ghost" data-print>הדפסה</button></div>
-    <p class="small mut">כל רישום שהתקנות מחייבות: צ'ק-אין יומי וביקורות היום, בדיקות, מינויים, דיווחים ואירועים. רישום של נציג מבצע הבנייה מסומן "מטעם מבצע הבנייה". המזמין רואה את הפנקס. אין מחיקה ואין עריכה. עדיין צריך פנקס כללי מודפס באתר, כי לא נבדק אם מותר להחזיק פנקס דיגיטלי בלבד.</p>
+    <p class="small mut">כל רישום שהתקנות מחייבות: צ'ק-אין יומי וביקורות היום, בדיקות, מינויים, דיווחים, אירועים וליקויים. רישום של נציג מבצע הבנייה מסומן "מטעם מבצע הבנייה". המזמין רואה את הפנקס. אין מחיקה ואין עריכה.</p>
+    <div class="banner">הפנקס הכללי נשמר בטופס שנקבע (סעיף 198 לפקודת הבטיחות בעבודה וצו הבטיחות בעבודה (פנקס כללי), תש"ך-1959). לא מצאנו הוראה שמתירה פנקס דיגיטלי בלבד, ולכן הפנקס המודפס נשאר באתר. מכאן מפיקים דפים מוכנים לצירוף לפנקס.<div class="actions"><button class="btn small" data-pages>📄 דפים לצירוף לפנקס (PDF)</button></div></div>
     <div class="log">${items.map(x => `<div class="lrow"><div class="small mut">${fmtDT(x.at)}</div><div><b>${esc(x.kind)}</b><div class="small">${esc(x.who)}</div>${x.text ? `<div class="small pre">${esc(x.text)}</div>` : ''}${x.geo ? `<div class="small mut">מיקום: ${esc(x.geo)}</div>` : ''}${x.ref ? `<div class="small mut">§ ${esc(x.ref)}</div>` : ''}</div></div>`).join('') || '<div class="empty">אין רישומים עדיין</div>'}</div></div>`);
   $('[data-print]', el).onclick = () => window.print();
+  $('[data-pages]', el).onclick = () => logPages(s);
   return el;
+}
+// דפים לצירוף לפנקס הכללי המודפס, לפי טווח תאריכים
+async function logPages(s) {
+  const iso = d => d.toISOString().slice(0, 10);
+  const v = await modal({ title: 'דפים לצירוף לפנקס הכללי', ok: 'הפקת PDF',
+    body: `<div class="grid g2">${field('מתאריך', 'from', iso(new Date(Date.now() - 7 * 864e5)), { type: 'date', req: true })}${field('עד תאריך', 'to', iso(new Date()), { type: 'date', req: true })}</div>
+      <p class="small mut">מדפיסים, חותמים ומצרפים לפנקס הכללי שבאתר.</p>`,
+    validate: d => !d.from || !d.to ? 'צריך טווח תאריכים' : d.from > d.to ? 'תאריך ההתחלה אחרי תאריך הסיום' : null });
+  if (!v) return;
+  const win = window.open('', '_blank');
+  try {
+    const rows = logItems(s).filter(x => x.at && String(x.at).slice(0, 10) >= v.from && String(x.at).slice(0, 10) <= v.to).reverse();
+    const con = siteOrgs(s.id, 'contractor').map(o => o.name).join(', ');
+    const blocks = [
+      { type: 'title', text: 'רישומים לצירוף לפנקס הכללי', brand: 'צי הנדסה', sub: `${s.name}${s.address ? ', ' + s.address : ''} · ${fmtDate(v.from)} עד ${fmtDate(v.to)}` },
+      { type: 'kv', rows: [['מבצע הבנייה', con || '—'], ['מספר רישומים', String(rows.length)]] },
+      { type: 'table', cols: [{ h: 'מועד', w: 0.15 }, { h: 'רישום', w: 0.27 }, { h: 'מי', w: 0.18 }, { h: 'פרטים', w: 0.4 }],
+        rows: rows.map(x => [fmtDT(x.at), x.kind, x.who || '', [x.text, x.ref ? '§ ' + x.ref : ''].filter(Boolean).join('\n')]) },
+      { type: 'p', size: 20, bold: true, color: '#111', text: 'שם וחתימת מנהל העבודה: ____________________    תאריך: __________' },
+      { type: 'p', size: 16, color: '#666', text: `הופק ${fmtDT(new Date().toISOString())} ממערכת ניהול הבטיחות של צי הנדסה. העתק זה מצורף לפנקס הכללי המודפס שבאתר.` }];
+    const blob = await pagesToPdf(await renderPdfPages(blocks, `${s.name} · פנקס כללי`));
+    const u = URL.createObjectURL(blob);
+    if (win && win.location) win.location.href = u; else window.open(u, '_blank');
+  } catch (e) { win?.close?.(); toast(e.message, 'bad'); }
 }
 
 // ===== יומן ביקורת =====
