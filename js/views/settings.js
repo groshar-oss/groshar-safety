@@ -1,6 +1,6 @@
 // הגדרות ותצוגה: ערכת צבעים, מייל (Gmail), שעות שקטות, תצוגה מקדימה של מיילים שממתינים, סיכום יומי
 import { S, isAdmin, render } from '../app.js';
-import { isCloud } from '../db.js';
+import { db, isCloud } from '../db.js';
 import { settings, saveSettings, pendingEmails, autoEmail, sendDigest, digestFor } from '../alerts.js';
 import { gconf, setGconf, gConnect, gDisconnect, gReady, gEnabled, gmailSend, isEmail } from '../google.js';
 import { LEVELS } from '../duties.js';
@@ -69,5 +69,36 @@ export function viewSettings() {
   });
   $('#sendNow', el)?.addEventListener('click', async e => { e.target.disabled = true; try { const n = await autoEmail(); toast(`נשלחו ${n} מיילים`); } catch (x) { toast(x.message, 'bad'); } render(); });
   $('#digest', el)?.addEventListener('click', async e => { e.target.disabled = true; try { const n = await sendDigest(); toast(`נשלח סיכום ל-${n} נמענים`); } catch (x) { toast(x.message, 'bad'); } render(); });
+  if (isAdmin()) serverCard(el);
   return el;
+}
+
+// מנהל השירות: מה נשלח מהשרת (מיילים אוטומטיים) והגיבויים החודשיים
+const KIND = { alert: 'התראה קריטית', digest: 'סיכום בוקר', weekly: 'דוח שבועי ליזם', backup: 'גיבוי חודשי' };
+const SERVER_TXT = 'השרת שולח לבד: התראה על חובה קריטית (אירוע בכל שעה, השאר בין 07:00 ל-20:00), סיכום בוקר לכל אחראי בימים א\'-ו\' מ-07:00, ודוח שבועי לנציג היזם ביום ראשון. ב-1 לכל חודש נשמר גיבוי של כל הנתונים.';
+async function serverCard(el) {
+  const card = h(`<div class="card"><h2>מיילים מהשרת וגיבוי חודשי</h2><div data-body class="small mut">טוען…</div></div>`);
+  ($('.cols', el) || el).appendChild(card);
+  const body = $('[data-body]', card);
+  if (!isCloud()) { body.textContent = SERVER_TXT; return; }
+  try {
+    const sb = db.sb;
+    const [{ data: log, error: e1 }, { data: files, error: e2 }] = await Promise.all([
+      sb.from('mail_log').select('kind,to_list,subject,ok,error,sent_at').order('sent_at', { ascending: false }).limit(25),
+      sb.storage.from('backups').list('', { limit: 24, sortBy: { column: 'name', order: 'desc' } })]);
+    if (e1) throw e1;
+    const dt = t => new Date(t).toLocaleString('he-IL', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' });
+    body.classList.remove('mut');
+    body.innerHTML = `<p class="mut">${SERVER_TXT}</p>
+      <h3>נשלחו לאחרונה</h3>
+      ${(log || []).filter(x => x.kind !== 'backup').map(x => `<div class="prow"><div><b>${esc(KIND[x.kind] || x.kind)}</b> <span class="mut">${dt(x.sent_at)}</span>${x.ok ? '' : ' <span class="chip red">נכשל</span>'}</div>
+        <div>${esc(x.subject || '')}</div><div class="mut" dir="ltr" style="text-align:right">${esc((x.to_list || []).join(', '))}</div>${x.error ? `<div class="neg">${esc(x.error)}</div>` : ''}</div>`).join('') || '<div class="mut">עוד לא נשלחו מיילים מהשרת</div>'}
+      <h3>גיבויים</h3>
+      ${e2 ? `<div class="neg">${esc(e2.message)}</div>` : (files || []).filter(f => f.name.endsWith('.gz')).map(f => `<div class="prow"><button type="button" class="btn link" data-bk="${esc(f.name)}">⬇ ${esc(f.name)}</button> <span class="mut">${Math.round((f.metadata?.size || 0) / 1024)} KB</span></div>`).join('') || '<div class="mut">עוד אין גיבוי. הראשון נשמר ב-1 לחודש.</div>'}`;
+    $$('[data-bk]', body).forEach(b => b.onclick = async () => {
+      const { data, error } = await sb.storage.from('backups').download(b.dataset.bk);
+      if (error) return toast(error.message, 'bad');
+      const a = document.createElement('a'); a.href = URL.createObjectURL(data); a.download = b.dataset.bk; a.click();
+    });
+  } catch (e) { body.innerHTML = `<span class="neg">${esc(e.message || String(e))}</span><br><span class="mut">אם עוד לא הרצת את mail.sql, זה צפוי.</span>`; }
 }

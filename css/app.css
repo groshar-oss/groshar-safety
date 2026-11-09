@@ -447,3 +447,5 @@ details summary{cursor:pointer;font-size:13px;font-weight:600;margin-top:8px}
 .ovchips .chip{margin:0 0 4px 6px;display:inline-block}
 .finding{background:var(--bg2,#f7f8fa)}
 .todo-box > .small + .small{margin-top:6px}
+
+.ocr-st{margin-top:6px;line-height:1.5}.ocr-st:empty{display:none}.ocr-st.ok{color:var(--ok,#13804a)}.ocr-st.warn{color:#9a5b00}

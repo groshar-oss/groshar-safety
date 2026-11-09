@@ -9,6 +9,7 @@ import { TRAINING_KINDS, COUNTS_ANNUAL, age, validIsraeliId, workersOf, training
 import { pad } from './sign.js';
 import { LANGS, langLabel, langCode, localStatement, reminderText, OK_BTN, SIGN_HERE } from '../langs.js';
 import { waLink, waShare } from '../alerts.js';
+import { scanId, natName, natLang } from '../ocr.js';
 import { openFile, fmtDT } from './common.js';
 
 export const canSeeWorkers = siteId => hasRole(siteId, 'con', 'so', 'sm', 'wm', 'rep', 'bakar');
@@ -101,7 +102,7 @@ export async function workerForm(s, w = null, { after } = {}) {
       <div class="grid g2">${select('תעודה מזהה', 'id_type', { il: 'תעודת זהות ישראלית', passport: 'דרכון' }, w?.id_type || 'il')}
         ${field('מספר התעודה', 'id_number', w?.id_number || '', { req: true, attrs: 'dir="ltr" autocomplete="off"' })}</div>
       <div class="grid g2">${field('תאריך לידה', 'birth_date', w?.birth_date || '', { type: 'date', req: true, hint: 'אסור להעסיק באתר בנייה עובד מתחת לגיל 18' })}
-        ${fileField('צילום התעודה' + (w?.id_photo_path ? ' (קיים. אפשר להחליף)' : ''), 'id_photo', { req: !w?.id_photo_path })}</div>
+        ${fileField('צילום התעודה' + (w?.id_photo_path ? ' (קיים. אפשר להחליף)' : ''), 'id_photo', { req: !w?.id_photo_path, note: 'דרכון: עמוד התמונה. תעודה ביומטרית: הגב. הפרטים ימולאו לבד' })}</div>
       <div class="grid g2">${field('חברה (קבלן ראשי או קבלן משנה)', 'company', w?.company || '', { attrs: 'list="cmpList"' })}${field('מקצוע', 'trade', w?.trade || '')}</div>
       <datalist id="cmpList">${[...new Set([...(S.data.site_orgs.filter(x => x.site_id === s.id).map(x => S.data.orgs.find(o => o.id === x.org_id)?.name)), ...workersOf(s.id).map(x => x.company)].filter(Boolean))].map(c => `<option value="${esc(c)}">`).join('')}</datalist>
       <div class="grid g2">${field('טלפון', 'phone', w?.phone || '', { type: 'tel', attrs: 'dir="ltr"' })}
@@ -123,6 +124,32 @@ export async function workerForm(s, w = null, { after } = {}) {
     onMount: el => {
       const sync = () => { $$('.sub-f', el).forEach(b => b.hidden = !$(`[name=${b.dataset.for}]`, el).checked); const nh = $('[name=no_height]', el); if (nh) $('[data-noh]', el).hidden = !nh.checked; };
       $$('[name=foreign_worker],[name=no_height]', el).forEach(x => x.addEventListener('change', sync)); sync();
+      // סריקת התעודה: קוראים את שורות ה-MRZ וממלאים שדות ריקים
+      const inp = $('[name=id_photo]', el), box = h('<div class="small ocr-st" data-ocr aria-live="polite"></div>');
+      (inp.closest('.fld') || inp.parentElement).appendChild(box);
+      inp.addEventListener('change', async () => {
+        const file = inp.files[0]; if (!file) return;
+        box.className = 'small ocr-st mut'; box.textContent = 'קורא את התעודה…';
+        try {
+          const r = await scanId(file);
+          if (!r) { box.className = 'small ocr-st warn'; box.textContent = 'לא הצלחנו לקרוא את התעודה. בדרכון מצלמים את עמוד התמונה עם שתי השורות <<< למטה, ובתעודת זהות ביומטרית את הגב. אפשר גם למלא ידנית.'; return; }
+          const f = $('form', el).elements, set = (k, v) => { if (v && f[k] && !String(f[k].value || '').trim()) { f[k].value = v; return true; } return false; };
+          const got = [];
+          if (r.id_type && !f.id_number.value.trim()) f.id_type.value = r.id_type;
+          if (set('id_number', r.number)) got.push('מספר התעודה');
+          if (set('birth_date', r.birth_date)) got.push('תאריך לידה');
+          if (set('name', r.name)) got.push('שם (באנגלית, אפשר לתקן)');
+          if (r.nationality && r.nationality !== 'ISR') {
+            const fw = f.foreign_worker; if (fw && !fw.checked) { fw.checked = true; fw.dispatchEvent(new Event('change')); }
+            if (set('nationality', natName(r.nationality))) got.push('אזרחות');
+            if (natLang(r.nationality) && f.language.value === 'he') { f.language.value = natLang(r.nationality); got.push('שפה'); }
+          }
+          const bad = r.checks && (!r.checks.number && r.id_type !== 'il' || !r.checks.birth);
+          box.className = 'small ocr-st ' + (bad ? 'warn' : 'ok');
+          box.textContent = (got.length ? '✓ מולא מהתעודה: ' + got.join(', ') + '. ' : 'הפרטים כבר מולאו. ') + (bad ? 'ספרת הביקורת לא תואמת, כדאי לבדוק את המספר ואת התאריך מול התעודה.' : 'לבדוק שהפרטים נכונים.')
+            + (r.expiry && r.expiry < new Date().toISOString().slice(0, 10) ? ` שים לב: התעודה פגה ב-${r.expiry.split('-').reverse().join('.')}.` : '');
+        } catch (x) { box.className = 'small ocr-st warn'; box.textContent = x.message || 'הקריאה נכשלה. ממלאים ידנית.'; }
+      });
     },
     validate: (d, f) => {
       form = f;
