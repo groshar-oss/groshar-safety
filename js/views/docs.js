@@ -43,14 +43,12 @@ export function wmDutiesFor(site) {
   return out;
 }
 
-export function authLetter(site, person) {
+// נוסח כתב ההסמכה (בלי חתימות). זה הנוסח שנחתם, וממנו מחושבת טביעת האצבע
+export function authLetterBody(site, person) {
   const con = siteOrgs(site.id, 'contractor').map(o => o.name).join(', ') || '________________';
   const backups = S.data.site_people.filter(p => p.site_id === site.id && p.role === 'rep' && p.backup && p.active !== false && p.id !== person.id);
   const rows = wmDutiesFor(site).map(([a, b]) => `<tr><td>${esc(a)}</td><td>${esc(b)}</td></tr>`).join('');
-  open(page('כתב הסמכה · ' + person.name, `
-    <div class="head"><div><h1>כתב הסמכה לנציג מבצע הבנייה באתר</h1>
-    <div class="mut"><span class="dot"></span>לפי תקנה 2(ז) ל${esc(LAW.B)} (תיקון התשפ"ו-2025)</div></div><img src="${LOGO()}" alt="צי הנדסה"></div>
-    <h2>הצדדים והאתר</h2>
+  return `<h2>הצדדים והאתר</h2>
     <table><tr><th>מבצע הבנייה</th><td>${esc(con)}</td></tr><tr><th>האתר</th><td>${esc(site.name)}, ${esc(site.address || '')}</td></tr>
       <tr><th>הנציג</th><td>${esc(person.name)}${person.phone ? ' · ' + esc(person.phone) : ''}${person.email ? ' · ' + esc(person.email) : ''}</td></tr>
       ${backups.length ? `<tr><th>ממלא מקום</th><td>${backups.map(b => esc(b.name) + (b.phone ? ' · ' + esc(b.phone) : '')).join('<br>')}</td></tr>` : ''}
@@ -60,9 +58,26 @@ export function authLetter(site, person) {
     <p>מבצע הבנייה מסמיך בזה את הנציג לבצע מטעמו, באתר, את חובות מנהל העבודה המפורטות להלן, ולהיות נוכח ומשגיח באתר בכל יום שבו מתבצעת עבודה. כשהנציג אינו באתר, ממלא מקומו מבצע את החובות.</p>
     <table><tr><th>החובה</th><th>מקור</th></tr>${rows}</table>
     <p><b>האחריות לפי הדין נשארת על מבצע הבנייה.</b> ההסמכה אינה מינוי מנהל עבודה לפי תקנה 2(א)(1), ואינה מעבירה את האחריות מבצע הבנייה לנציג.</p>
-    <p>הנציג מאשר שקרא את החובות, שהוא מבין אותן, ושידווח מיד למבצע הבנייה על כל סיכון שאינו קביל או על כל מצב שבו אינו יכול לבצע אותן.</p>
-    <div class="sig"><div>מבצע הבנייה: שם, תפקיד, חתימה וחותמת</div><div>הנציג: ${esc(person.name)}, חתימה</div><div>תאריך</div><div>תאריך</div></div>
-    <p class="note">את הכתב החתום מצרפים במערכת לחובה "רישום נציג מבצע הבנייה באתר", ומצרפים עותק לפנקס הכללי באתר (תקנה 2(ט)). המסמך הופק ממערכת ניהול הבטיחות של צי הנדסה ואינו חוות דעת משפטית.</p>`));
+    <p>הנציג מאשר שקרא את החובות, שהוא מבין אותן, ושידווח מיד למבצע הבנייה על כל סיכון שאינו קביל או על כל מצב שבו אינו יכול לבצע אותן.</p>`;
+}
+const sigFmt = t => new Date(t).toLocaleString('he-IL', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+// sigs = { executor, rep } חתימות תקפות (על הנוסח הנוכחי). בלי חתימות: שורות חתימה ריקות להדפסה
+export function authLetter(site, person, sigs = {}) {
+  const slot = (k, label) => sigs[k]
+    ? `<div><img src="${sigs[k].image}" alt="חתימה" style="height:70px;display:block"><b>${esc(sigs[k].signer_name)}</b>${sigs[k].signer_title ? ', ' + esc(sigs[k].signer_title) : ''}<br>${label} · נחתם ${esc(sigFmt(sigs[k].signed_at))}</div>`
+    : `<div>${label}: שם, תפקיד, חתימה${k === 'executor' ? ' וחותמת' : ''}</div><div>תאריך</div>`;
+  const signed = sigs.executor && sigs.rep;
+  const audit = Object.values(sigs).filter(Boolean).length ? `<h2>תיעוד החתימות</h2><table><tr><th>חותם</th><th>מועד (שעון השרת)</th><th>משתמש במערכת</th><th>מכשיר</th></tr>
+    ${Object.values(sigs).filter(Boolean).map(g => `<tr><td>${esc(g.signer_name)}${g.signer_title ? ' · ' + esc(g.signer_title) : ''}</td><td>${esc(sigFmt(g.signed_at))}</td><td dir="ltr">${esc(g.signed_by_email || '')}</td><td style="font-size:11px">${esc((g.user_agent || '').slice(0, 90))}${g.lat ? '<br>מיקום: ' + g.lat.toFixed(5) + ', ' + g.lng.toFixed(5) : ''}</td></tr>`).join('')}</table>
+    <p class="note">טביעת אצבע של הנוסח שנחתם (SHA-256): <span dir="ltr" style="font-family:monospace">${esc(Object.values(sigs).find(Boolean).doc_hash)}</span>. החתימות נשמרו במערכת ואינן ניתנות לעריכה או למחיקה.</p>` : '';
+  open(page('כתב הסמכה · ' + person.name, `
+    <div class="head"><div><h1>כתב הסמכה לנציג מבצע הבנייה באתר</h1>
+    <div class="mut"><span class="dot"></span>לפי תקנה 2(ז) ל${esc(LAW.B)} (תיקון התשפ"ו-2025)</div></div><img src="${LOGO()}" alt="צי הנדסה"></div>
+    ${authLetterBody(site, person)}
+    <div class="sig">${slot('executor', 'מבצע הבנייה')}${slot('rep', 'הנציג: ' + esc(person.name))}</div>
+    ${audit}
+    <p class="note">${signed ? 'הכתב נחתם במערכת וצורף לחובה "רישום נציג מבצע הבנייה באתר" ולפנקס הכללי.' : 'את הכתב החתום מצרפים במערכת לחובה "רישום נציג מבצע הבנייה באתר", ומצרפים עותק לפנקס הכללי באתר (תקנה 2(ט)).'} המסמך הופק ממערכת ניהול הבטיחות של צי הנדסה ואינו חוות דעת משפטית.</p>`,
+    signed ? '' : Object.keys(sigs).some(k => sigs[k]) ? '<p style="color:#c62828"><b>חסרה חתימה אחת. הכתב עוד לא בתוקף.</b></p>' : ''));
 }
 
 // שלט אתר: הפרטים של תקנה 7, במיתוג צי הנדסה. שדה בלי ערך לא מופיע בשלט; הרשימה של מה שחסר מוצגת רק במסך.

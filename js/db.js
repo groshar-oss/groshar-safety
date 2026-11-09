@@ -7,7 +7,7 @@ const LOCAL_KEY = 'grosher-safety-demo-v1';
 export const uuid = () => (crypto.randomUUID ? crypto.randomUUID() : 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, c => {
   const r = Math.random() * 16 | 0; return (c === 'x' ? r : (r & 3 | 8)).toString(16); }));
 
-const TABLES = ['orgs', 'memberships', 'sites', 'site_orgs', 'site_people', 'duties', 'events', 'notifications', 'files', 'audit_log', 'checkins', 'notices'];
+const TABLES = ['orgs', 'memberships', 'sites', 'site_orgs', 'site_people', 'duties', 'events', 'notifications', 'files', 'audit_log', 'checkins', 'notices', 'signatures'];
 const AUDITED = ['orgs', 'memberships', 'sites', 'site_orgs', 'site_people', 'duties', 'events', 'notices'];
 
 function match(row, q = {}) {
@@ -68,7 +68,7 @@ class LocalDB {
     Object.assign(row, patch); this.audit(table, 'update', row, old); this.save(); return { ...row };
   }
   async remove(table, id) {
-    if (['duties', 'audit_log', 'notifications', 'notices'].includes(table)) throw new Error('אי אפשר למחוק רשומה זו. אפשר לסגור אותה עם נימוק.');
+    if (['duties', 'audit_log', 'notifications', 'notices', 'signatures'].includes(table)) throw new Error('אי אפשר למחוק רשומה זו. אפשר לסגור אותה עם נימוק.');
     const row = this.data.tables[table].find(r => r.id === id);
     this.data.tables[table] = this.data.tables[table].filter(r => r.id !== id);
     if (row) this.audit(table, 'delete', row, { ...row });

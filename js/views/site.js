@@ -7,7 +7,8 @@ import { esc, h, $, $$, toast, modal, field, select, area, fmtDate } from '../ut
 import { dutyCard, compliance, gauge, openDuty, reportEvent, canReport, fmtDT, sideName } from './common.js';
 import { statusName } from './home.js';
 import { checkinCard, checkinsFor } from './checkin.js';
-import { authLetter, siteSign } from './docs.js';
+import { siteSign } from './docs.js';
+import { openAuthSign, authStatus } from './sign.js';
 
 const TABS = [['overview', 'סקירה'], ['duties', 'חובות'], ['events', 'אירועים'], ['people', 'בעלי תפקידים'], ['log', 'פנקס כללי'], ['audit', 'יומן ביקורת']];
 
@@ -170,14 +171,14 @@ function tabPeople(s) {
     <div class="plist">${all.map(p => `<div class="prow ${p.active === false ? 'off' : ''}">
       <div><b>${esc(p.name)}</b> ${p.backup ? '<span class="chip">מחליף</span>' : ''}${p.active === false ? '<span class="chip">לא פעיל</span>' : ''}<div class="small mut">${ROLES[p.role] || p.role}${p.license ? ' · ' + esc(p.license) : ''}</div></div>
       <div class="small" dir="ltr">${esc(p.phone || '')}<br>${esc(p.email || '')}</div>
-      <div class="actions">${p.role === 'rep' && p.active !== false ? `<button class="btn small ghost" data-auth="${p.id}">כתב הסמכה</button>` : ''}${canManage(s, p.role) ? `<button class="btn small ghost" data-edit="${p.id}">עריכה</button>` : ''}</div></div>`).join('')}
+      <div class="actions">${p.role === 'rep' && p.active !== false ? `<button class="btn small ${authStatus(p) === 'signed' ? 'ghost' : ''}" data-auth="${p.id}">כתב הסמכה${authStatus(p) === 'signed' ? ' ✓ נחתם' : authStatus(p) === 'partial' ? ' · חסרה חתימה' : ' · לחתימה'}</button>` : ''}${canManage(s, p.role) ? `<button class="btn small ghost" data-edit="${p.id}">עריכה</button>` : ''}</div></div>`).join('')}
     ${missing.map(([r]) => `<div class="prow need"><div><b>${ROLES[r]}</b> <span class="chip red">חסר</span><div class="small mut">${esc(WHY[r] || '')}</div></div><div></div>
       <div class="actions">${canManage(s, r) ? `<button class="btn small" data-fill="${r}">השלמה</button>` : `<span class="small mut">ממנה ${SIDE_OF_ROLE[r] === 'dev' ? 'היזם' : 'הקבלן הראשי'}</span>`}</div></div>`).join('')}
     ${!all.length && !missing.length ? '<div class="empty">עוד לא הוגדרו בעלי תפקידים</div>' : ''}</div></div></div>`);
   $$('[data-fill]', el).forEach(b => b.onclick = () => personForm(s, null, b.dataset.fill));
   $('[data-add]', el)?.addEventListener('click', () => personForm(s));
   $$('[data-edit]', el).forEach(b => b.onclick = () => personForm(s, all.find(p => p.id === b.dataset.edit)));
-  $$('[data-auth]', el).forEach(b => b.onclick = () => authLetter(s, all.find(p => p.id === b.dataset.auth)));
+  $$('[data-auth]', el).forEach(b => b.onclick = () => openAuthSign(s, all.find(p => p.id === b.dataset.auth)));
   return el;
 }
 

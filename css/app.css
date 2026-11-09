@@ -376,3 +376,11 @@ details summary{cursor:pointer;font-size:13px;font-weight:600;margin-top:8px}
 .notice .miss{color:#c62828;font-weight:600}.notice .nbody{white-space:pre-line;background:var(--bg2,rgba(127,127,127,.08));border-radius:8px;padding:10px;margin:8px 0}
 .notice .actions{display:flex;flex-wrap:wrap;gap:8px;margin-top:10px}
 .prow.need{border:1px dashed var(--line);border-radius:10px;background:rgba(232,145,45,.06)}
+
+/* חתימה על כתב הסמכה */
+.sgdoc{max-height:38vh;overflow:auto;border:1px solid var(--line);border-radius:8px;padding:10px;font-size:13px;margin:8px 0}
+.sgdoc table{border-collapse:collapse;width:100%}.sgdoc td,.sgdoc th{border:1px solid var(--line);padding:4px 6px;text-align:right}
+.sggrid{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin:12px 0}@media (max-width:760px){.sggrid{grid-template-columns:1fr}}
+.sgslot{border:1px solid var(--line);border-radius:10px;padding:10px}.sgslot.done{border-color:#13804a}
+.sgslot img{display:block;max-width:100%;height:80px;background:#fff;border-radius:6px;margin:6px 0}
+.sgpad{display:block;width:100%;height:160px;background:#fff;border:1px dashed #9DB3CB;border-radius:8px;touch-action:none;margin:8px 0}

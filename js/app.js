@@ -54,7 +54,8 @@ export async function loadAll() {
     ['orgs', 'sites', 'site_orgs', 'site_people', 'duties', 'events', 'notifications', 'checkins'].map(t => db.select(t, { order: 'created_at' })));
   // הודעות רשמיות: טבלה חדשה. אם עוד לא קיימת בשרת, המערכת ממשיכה לעבוד בלעדיה
   const notices = await db.select('notices', { order: 'created_at' }).catch(() => []);
-  S.data = { orgs, sites, site_orgs, site_people, duties, events, notifications, checkins, notices };
+  const signatures = await db.select('signatures', { order: 'created_at' }).catch(() => []);
+  S.data = { orgs, sites, site_orgs, site_people, duties, events, notifications, checkins, notices, signatures };
   // סנכרון החובות מול הפרופיל של כל אתר (חובה חוזרת שבוצעה פותחת את הבאה)
   for (const s of sites) await syncSite(s, false);
   return S.data;
