@@ -115,10 +115,16 @@ export function demoData(uuid) {
   const worker = (site, name, extra = {}) => { const w = { id: uuid(), site_id: site.id, name, id_type: 'il', id_number: '000000018', id_photo_path: `${site.id}/workers/demo/id.jpg`, birth_date: born(30),
     company: '', trade: '', phone: '', foreign_worker: false, height: false, active: true, added_by_email: 'demo', created_at: at(-24 * 25), ...extra }; T.workers.push(w); return w; };
   const w1 = worker(s4, 'אחמד חאג׳ (דמו)', { company: con2.name, trade: 'גבס', height: true, height_until: day(9), height_path: `${s4.id}/workers/demo/h.jpg` });
-  const w2 = worker(s4, 'יבגני קוזלוב (דמו)', { company: 'אלקטרו פלוס (קבלן משנה, דמו)', trade: 'חשמל', birth_date: born(41) });
+  const w2 = worker(s4, 'יבגני קוזלוב (דמו)', { company: 'אלקטרו פלוס (קבלן משנה, דמו)', trade: 'חשמל', birth_date: born(41), height: true, height_until: day(400), height_path: `${s4.id}/workers/demo/h2.jpg` });
   const w3 = worker(s4, 'Somchai Kaew (דמו)', { id_type: 'passport', id_number: 'AA1234567', company: con2.name, trade: 'טיח', foreign_worker: true, nationality: 'תאילנד',
     entry_date: day(-20), permit_no: '2026-77881', permit_until: day(200), birth_date: born(28) });
   worker(s4, 'דניאל אברהם (דמו)', { company: con2.name, trade: 'צבע', birth_date: born(19), created_at: at(-3) });
+  // החרגה מאישור עבודה בגובה (דמו), ונוכחות של אתמול
+  (T.worker_exemptions ||= []).push({ id: uuid(), site_id: s4.id, worker_id: w3.id, kind: 'height', cancel: false, reason: 'עובד טיח בקומת הקרקע בלבד, לא עולה לגובה (דמו)',
+    approver_name: 'שירן מזרחי', approver_role: 'con', approved_by_email: 'demo', created_at: at(-24 * 19) });
+  const yday = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Jerusalem' }).format(new Date(now - D));
+  T.attendance ||= []; T.site_inspections ||= [];
+  for (const w of [w1, w2, w3]) T.attendance.push({ id: uuid(), site_id: s4.id, worker_id: w.id, day: yday, present: true, marked_by_email: 'demo', marked_at: at(-20), created_at: at(-20) });
   const tr = { id: uuid(), site_id: s4.id, kind: 'intro', topic: 'הדרכת אתר: סיכוני האתר, פיגומים, גידור מכונות, עזרה ראשונה, יציאות חירום', trainer_name: 'מוטי אזולאי', trainer_title: 'נציג מבצע הבנייה, קורס מנהלי עבודה',
     language: 'עברית, ערבית', content: '', held_at: at(-24 * 20), pdf_path: null, closed_at: at(-24 * 20 + 1), created_by_email: 'demo', created_at: at(-24 * 20) };
   T.trainings.push(tr);

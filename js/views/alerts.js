@@ -5,6 +5,7 @@ import { LEVELS, ROLES } from '../duties.js';
 import { esc, h, $, $$, select } from '../util.js';
 import { chip, sideName, sendBlock, wireSend, fmtDT } from './common.js';
 import { leftText } from '../duties.js';
+import { todoFor } from '../todo.js';
 
 export function viewAlerts() {
   const sites = visibleSites();
@@ -33,6 +34,7 @@ export function viewAlerts() {
         <div class="dm">${esc(leftText(x.duty))}${x.duty.due_at ? ' · ' + fmtDT(x.duty.due_at) : ''} · אחראי: ${esc(x.roles.map(r => ROLES[r]).join(', '))}${x.to.length ? ' (' + esc(x.to.map(p => p.name).join(', ')) + ')' : ''}</div>
         ${x.cc.length ? `<div class="small mut">לידיעה: ${esc(x.cc.map(p => p.name).join(', '))}</div>` : ''}
         ${x.note ? `<div class="dn">${esc(x.note)}</div>` : ''}
+        <div class="todo-box"><b>מה עושים</b><p>${esc(todoFor(x.duty).text)}</p><div class="actions"><a class="btn small" href="#/site/${x.site.id}/duties/${x.duty.id}">לטפל עכשיו</a></div></div>
         <div class="small mut">§ ${esc(x.duty.ref)}</div>
         ${last ? `<div class="small ok-t">נשלח לאחרונה: ${fmtDT(last.sent_at)} · ${last.channel === 'whatsapp' ? 'WhatsApp' : 'מייל'} · ${esc(last.recipient_name)}</div>` : ''}
         <details><summary>שליחה ב-WhatsApp / מייל</summary>${sendBlock(x)}</details></div>`;

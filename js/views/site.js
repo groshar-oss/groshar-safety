@@ -12,6 +12,7 @@ import { openAuthSign, authStatus } from './sign.js';
 import { tabWorkers, canSeeWorkers } from './workers.js';
 import { tabEquipment } from './equipment.js';
 import { tabRecurring } from './recurring.js';
+import { tabInspect, canInspect } from './inspect.js';
 import { TRAINING_KINDS, sigsOfTraining, equipmentOf } from '../workers.js';
 
 const TABS = [['overview', 'סקירה'], ['recurring', 'משימות חוזרות'], ['workers', 'עובדים והדרכות'], ['equipment', 'ציוד ותסקירים'], ['duties', 'חובות'], ['events', 'אירועים'], ['people', 'בעלי תפקידים'], ['log', 'פנקס כללי'], ['audit', 'יומן ביקורת']];
@@ -19,9 +20,9 @@ const TABS = [['overview', 'סקירה'], ['recurring', 'משימות חוזרו
 export function viewSite(id, tab = 'overview', c, d) {
   const s = siteById(id);
   if (!s || !myRoles(id).length) return h('<div class="card empty">האתר לא נמצא או שאין לך גישה אליו</div>');
-  const body = tab === 'workers' ? tabWorkers(s, c, d) : tab === 'equipment' ? tabEquipment(s, c) : tab === 'recurring' ? tabRecurring(s) : tab === 'duties' ? tabDuties(s, c) : tab === 'events' ? tabEvents(s) : tab === 'people' ? tabPeople(s) : tab === 'audit' ? tabAudit(s) : tab === 'log' ? tabLog(s) : tabOverview(s);
+  const body = tab === 'inspect' ? tabInspect(s) : tab === 'workers' ? tabWorkers(s, c, d) : tab === 'equipment' ? tabEquipment(s, c) : tab === 'recurring' ? tabRecurring(s) : tab === 'duties' ? tabDuties(s, c) : tab === 'events' ? tabEvents(s) : tab === 'people' ? tabPeople(s) : tab === 'audit' ? tabAudit(s) : tab === 'log' ? tabLog(s) : tabOverview(s);
   const el = h(`<div><div class="top"><div><h1>${esc(s.name)}</h1><div class="sub">${esc(s.address || '')} · ${esc(WORK_TYPES[s.profile?.work_type] || '')} · <span class="chip">${esc(statusName(s.status))}</span></div></div>
-    <div class="actions">${canReport(s.id) ? '<button class="btn" data-ev>דיווח אירוע</button>' : ''}<button class="btn ghost" data-sign>שלט אתר</button>${hasRole(s.id, 'dev') ? `<a class="btn ghost" href="#/new-site/${s.id}">פרופיל משפטי</a>` : ''}</div></div>
+    <div class="actions">${canInspect(s.id) ? `<a class="btn ${tab === 'inspect' ? '' : 'ghost'}" href="#/site/${s.id}/inspect">ביקורת באתר</a>` : ''}${canReport(s.id) ? '<button class="btn" data-ev>דיווח אירוע</button>' : ''}<button class="btn ghost" data-sign>שלט אתר</button>${hasRole(s.id, 'dev') ? `<a class="btn ghost" href="#/new-site/${s.id}">פרופיל משפטי</a>` : ''}</div></div>
     <nav class="tabs">${TABS.filter(([k]) => k !== 'workers' || canSeeWorkers(s.id)).map(([k, l]) => `<a href="#/site/${s.id}/${k}" class="${k === tab ? 'on' : ''}">${l}</a>`).join('')}</nav>
     <div id="tabBody"></div></div>`);
   $('#tabBody', el).appendChild(body);
@@ -48,7 +49,7 @@ function tabOverview(s) {
   const devs = siteOrgs(s.id, 'developer').map(o => esc(o.name)).join(', ');
   const cons = siteOrgs(s.id, 'contractor').map(o => esc(o.name)).join(', ');
   const el = h(`<div>
-    ${dv.clientDuties && !people.some(p => p.role === 'bakar') ? '<div class="banner crit">⛔ אין בקר בטיחות ממונה. כל עוד לא מונה, חובות הבקר חלות על היזם (תקנה 1א(ב)).</div>' : ''}
+    ${dv.clientDuties && !people.some(p => p.role === 'bakar') ? `<div class="banner crit">⛔ אין בקר בטיחות ממונה. כל עוד לא מונה, חובות הבקר חלות על היזם (תקנה 1א(ב)).<div class="actions"><a class="btn small" href="#/site/${s.id}/people">רישום בקר בטיחות</a></div></div>` : ''}
     ${wmBanner(s)}
     ${checkinCard(s)}
     ${dv.devIsExecutor ? '<div class="banner crit">יש באתר יותר מקבלן ראשי אחד ואף אחד מהם לא קיבל אחריות כוללת בכתב: היזם הוא מבצע הבנייה (תקנה 6(ג)).</div>' : ''}
@@ -83,9 +84,10 @@ export function wmBanner(s) {
   const rep = act('rep').filter(p => !p.backup), bk = act('rep').filter(p => p.backup);
   const proof = S.data.duties.find(d => d.site_id === s.id && d.key === 'con_exempt_proof');
   const unverified = proof && proof.status === 'open';
+  const fix = unverified ? `<div class="actions"><a class="btn small" href="#/site/${s.id}/duties/${proof.id}">📷 צירוף המסמך שמוכיח את הפטור</a></div>` : '';
   return rep.length
-    ? `<div class="banner">חובות מנהל העבודה חלות על מבצע הבנייה (תקנה 2(ז)). מבצע בפועל באתר: <b>${rep.map(p => esc(p.name)).join(', ')}</b>${bk.length ? ` · ממלא מקום: ${bk.map(p => esc(p.name)).join(', ')}` : ' · <span class="neg">אין ממלא מקום</span>'}${unverified ? '<br><span class="neg">הסיווג לפי 2(ז) עוד לא מאומת: חסר מסמך שמוכיח את הפטור. עד הצירוף יש לעבוד עם מנהל עבודה רשום.</span>' : ''}</div>`
-    : `<div class="banner crit">⛔ חובות מנהל העבודה חלות על מבצע הבנייה (תקנה 2(ז)), ואין באתר אדם שמבצע אותן. רושמים נציג מבצע הבנייה בלשונית "בעלי תפקידים", או ממנים מנהל עבודה.${unverified ? '<br>הסיווג לפי 2(ז) עוד לא מאומת: חסר מסמך שמוכיח את הפטור.' : ''}</div>`;
+    ? `<div class="banner">חובות מנהל העבודה חלות על מבצע הבנייה (תקנה 2(ז)). מבצע בפועל באתר: <b>${rep.map(p => esc(p.name)).join(', ')}</b>${bk.length ? ` · ממלא מקום: ${bk.map(p => esc(p.name)).join(', ')}` : ' · <span class="neg">אין ממלא מקום</span>'}${unverified ? '<br><span class="neg">הסיווג לפי 2(ז) עוד לא מאומת: חסר מסמך שמוכיח את הפטור. עד הצירוף יש לעבוד עם מנהל עבודה רשום.</span>' : ''}${fix}</div>`
+    : `<div class="banner crit">⛔ חובות מנהל העבודה חלות על מבצע הבנייה (תקנה 2(ז)), ואין באתר אדם שמבצע אותן. רושמים נציג מבצע הבנייה בלשונית "בעלי תפקידים", או ממנים מנהל עבודה.${unverified ? '<br>הסיווג לפי 2(ז) עוד לא מאומת: חסר מסמך שמוכיח את הפטור.' : ''}<div class="actions"><a class="btn small" href="#/site/${s.id}/people">רישום נציג באתר</a>${unverified ? `<a class="btn small ghost" href="#/site/${s.id}/duties/${proof.id}">📷 צירוף המסמך שמוכיח את הפטור</a>` : ''}</div></div>`;
 }
 
 // ===== חובות =====
@@ -238,6 +240,10 @@ function tabLog(s) {
       who: `${t.trainer_name}${t.trainer_title ? ' · ' + t.trainer_title : ''}`, text: `${t.topic}\nחתמו ${sigsOfTraining(t.id).length} עובדים: ${sigsOfTraining(t.id).map(g => g.worker_name).join(', ')}${t.closed_at ? '' : '\n(ההדרכה עוד פתוחה לחתימות)'}` })) : []),
     ...(S.data.inspections || []).filter(r => r.site_id === s.id).map(r => { const e = equipmentOf(s.id).find(x => x.id === r.equipment_id); return { at: r.inspected_at, kind: 'תסקיר: ' + (e?.name || '') + (e?.ident ? ' ' + e.ident : ''),
       who: r.inspector, text: `בתוקף עד ${fmtDate(r.next_due)}${r.note ? '\n' + r.note : ''}` }; }),
+    ...(S.data.site_inspections || []).filter(x => x.site_id === s.id).map(x => ({ at: x.started_at, kind: 'ביקורת באתר: ' + x.inspector_name, who: x.started_by_email || '',
+      text: [x.purpose, (x.notified || []).length ? 'הודעה נשלחה אל: ' + [...new Set(x.notified.map(n => n.name))].join(', ') : ''].filter(Boolean).join('\n') })),
+    ...(canSeeWorkers(s.id) ? Object.entries((S.data.attendance || []).filter(a => a.site_id === s.id && a.present).reduce((m, a) => { (m[a.day] ||= []).push(a.worker_id); return m; }, {}))
+      .map(([day, ids]) => ({ at: day + 'T06:00:00', kind: `נוכחות: ${ids.length} עובדים באתר`, who: '', text: ids.map(id => (S.data.workers || []).find(w => w.id === id)?.name || '').filter(Boolean).join(', ') })) : []),
     ...(S.data.notices || []).filter(n => n.site_id === s.id && n.status === 'sent').map(n => ({ at: n.sent_at, kind: 'הודעה רשמית: ' + n.title, who: `${n.sent_by || ''} · אושרה בידי ${n.approved_by || ''}`,
       text: [n.channel === 'email' ? 'אל: ' + (n.to_list || []).map(p => p.name).join(', ') : '', n.sent_ref ? 'אסמכתה: ' + n.sent_ref : '', n.channel === 'gov' ? (n.fields || []).map(([k, v]) => k + ': ' + (v || '')).join('\n') : n.body].filter(Boolean).join('\n') }))
   ].sort((a, b) => String(b.at).localeCompare(String(a.at)));

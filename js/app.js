@@ -60,7 +60,10 @@ export async function loadAll() {
   // פנקס עובדים, הדרכות וציוד (חבילה 1.5). מי שאין לו הרשאה מקבל רשימה ריקה
   const [workers, trainings, training_signatures, equipment, inspections] = await Promise.all(
     ['workers', 'trainings', 'training_signatures', 'equipment', 'inspections'].map(t => db.select(t, { order: 'created_at' }).catch(() => [])));
-  S.data = { orgs, sites, site_orgs, site_people, duties, events, notifications, checkins, notices, signatures, workers, trainings, training_signatures, equipment, inspections };
+  // נוכחות, החרגות וביקורות (חבילה 1.6)
+  const [attendance, worker_exemptions, site_inspections] = await Promise.all(
+    ['attendance', 'worker_exemptions', 'site_inspections'].map(t => db.select(t, { order: 'created_at' }).catch(() => [])));
+  S.data = { orgs, sites, site_orgs, site_people, duties, events, notifications, checkins, notices, signatures, workers, trainings, training_signatures, equipment, inspections, attendance, worker_exemptions, site_inspections };
   // סנכרון החובות מול הפרופיל של כל אתר (חובה חוזרת שבוצעה פותחת את הבאה)
   for (const s of sites) await syncSite(s, false);
   return S.data;

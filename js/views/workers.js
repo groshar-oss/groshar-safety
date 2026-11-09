@@ -2,9 +2,10 @@
 // עובדים לא נכנסים למערכת. רושם ומדריך: מנהל עבודה, נציג מבצע הבנייה, או מנהל השירות
 import { db, uuid } from '../db.js';
 import { S, hasRole, syncSite, render } from '../app.js';
-import { esc, h, $, $$, toast, modal, field, select, area, fmtDate } from '../util.js';
+import { esc, h, $, $$, toast, modal, field, select, area, fmtDate, fileField } from '../util.js';
 import { TRAINING_KINDS, COUNTS_ANNUAL, age, validIsraeliId, workersOf, trainingsOf, sigsOfTraining, sigsOfWorker, lastAnnual, workerStatus,
-  putWorkerFile, renderPdfPages, pagesToPdf, loadImg, sha256Hex } from '../workers.js';
+  putWorkerFile, renderPdfPages, pagesToPdf, loadImg, sha256Hex, israelDay, attendanceOf, isPresent, daysPresent, lastAttendanceDay,
+  heightExemption, canExemptHeight, exemptApprover } from '../workers.js';
 import { pad } from './sign.js';
 import { openFile, fmtDT } from './common.js';
 
@@ -19,6 +20,7 @@ const idLabel = w => (w.id_type === 'passport' ? 'דרכון ' : 'ת"ז ') + w.i
 export function tabWorkers(s, c, d) {
   if (!canSeeWorkers(s.id)) return h('<div class="card empty">פנקס העובדים גלוי לצד הקבלן ולבקר הבטיחות בלבד</div>');
   if (c === 'training' && d) return trainingScreen(s, d);
+  if (c === 'attendance') return attendanceScreen(s);
   const can = canRegister(s.id);
   const all = workersOf(s.id).map(w => ({ w, st: workerStatus(w) }));
   const rank = { bad: 0, warn: 1, ok: 2, off: 3 };
@@ -27,13 +29,15 @@ export function tabWorkers(s, c, d) {
   const trs = trainingsOf(s.id);
   const el = h(`<div>
     <div class="fbar">${can ? `<button class="btn big" data-newtr>＋ הדרכה חדשה</button><button class="btn big ghost" data-neww>＋ עובד חדש</button>` : '<p class="small mut">רישום עובדים והדרכות: מנהל העבודה, נציג מבצע הבנייה או מנהל השירות.</p>'}</div>
+    <a class="card fsum att-sum" href="#/site/${s.id}/workers/attendance"><h2>נוכחות היום <span class="mut small">${all.filter(x => x.st.lv !== 'off' && isPresent(x.w.id)).length} באתר מתוך ${all.filter(x => x.st.lv !== 'off').length}</span></h2>
+      <div class="small">${can ? 'סימון מי נמצא היום באתר ›' : 'מי נמצא היום באתר ›'}</div></a>
     <div class="kpis"><div class="kpi"><div class="l">מותר לעבוד</div><div class="v" style="color:#13804a">${n('ok')}</div></div>
       <div class="kpi"><div class="l">פג בקרוב</div><div class="v" style="color:#e08a00">${n('warn')}</div></div>
       <div class="kpi"><div class="l">אסור להעסיק</div><div class="v neg">${n('bad')}</div></div></div>
     <div class="card"><div class="dh"><h2>עובדים באתר <span class="mut small">${all.filter(x => x.st.lv !== 'off').length}</span></h2></div>
       <input class="search" placeholder="חיפוש לפי שם, חברה או מקצוע" data-q>
       <div class="wlist">${all.map(({ w, st }) => `<button type="button" class="wrow lv-${st.lv}" data-w="${w.id}" data-txt="${esc((w.name + ' ' + (w.company || '') + ' ' + (w.trade || '')).toLowerCase())}">
-        <div><b>${esc(w.name)}</b> ${stChip(st)}${w.foreign_worker ? ' <span class="chip">עובד זר</span>' : ''}${w.height ? ' <span class="chip">עבודה בגובה</span>' : ''}
+        <div><b>${esc(w.name)}</b> ${stChip(st)}${isPresent(w.id) ? ' <span class="chip blue">באתר היום</span>' : ''}${w.foreign_worker ? ' <span class="chip">עובד זר</span>' : ''}
           <div class="small mut">${esc([w.company, w.trade].filter(Boolean).join(' · '))}</div>
           ${st.issues.length && st.lv !== 'off' ? `<div class="small ${st.lv === 'bad' ? 'neg' : ''}">${esc(st.issues.join(' · '))}</div>` : ''}</div><span class="go">‹</span></button>`).join('') || '<div class="empty">עוד לא נרשמו עובדים</div>'}</div></div>
     <div class="card"><h2>הדרכות <span class="mut small">${trs.length}</span></h2>
@@ -51,12 +55,13 @@ export function tabWorkers(s, c, d) {
 // ===== רישום ועריכת עובד =====
 export async function workerForm(s, w = null, { after } = {}) {
   let form = null;
+  const hx = w ? heightExemption(w) : null;
   const v = await modal({ title: w ? 'עדכון עובד' : 'עובד חדש', ok: 'שמירה', wide: true,
     body: `${field('שם מלא', 'name', w?.name || '', { req: true })}
       <div class="grid g2">${select('תעודה מזהה', 'id_type', { il: 'תעודת זהות ישראלית', passport: 'דרכון' }, w?.id_type || 'il')}
         ${field('מספר התעודה', 'id_number', w?.id_number || '', { req: true, attrs: 'dir="ltr" autocomplete="off"' })}</div>
       <div class="grid g2">${field('תאריך לידה', 'birth_date', w?.birth_date || '', { type: 'date', req: true, hint: 'אסור להעסיק באתר בנייה עובד מתחת לגיל 18' })}
-        <label class="fld"><span>צילום התעודה${w?.id_photo_path ? ' (קיים. אפשר להחליף)' : ' <b class="req">*</b>'}</span><input type="file" name="id_photo" accept="image/*,application/pdf" capture="environment"></label></div>
+        ${fileField('צילום התעודה' + (w?.id_photo_path ? ' (קיים. אפשר להחליף)' : ''), 'id_photo', { req: !w?.id_photo_path })}</div>
       <div class="grid g2">${field('חברה (קבלן ראשי או קבלן משנה)', 'company', w?.company || '', { attrs: 'list="cmpList"' })}${field('מקצוע', 'trade', w?.trade || '')}</div>
       <datalist id="cmpList">${[...new Set([...(S.data.site_orgs.filter(x => x.site_id === s.id).map(x => S.data.orgs.find(o => o.id === x.org_id)?.name)), ...workersOf(s.id).map(x => x.company)].filter(Boolean))].map(c => `<option value="${esc(c)}">`).join('')}</datalist>
       ${field('טלפון', 'phone', w?.phone || '', { type: 'tel', attrs: 'dir="ltr"' })}
@@ -66,15 +71,17 @@ export async function workerForm(s, w = null, { after } = {}) {
         <div class="grid g2">${field('מספר היתר / אשרה', 'permit_no', w?.permit_no || '', { attrs: 'dir="ltr"' })}${field('ההיתר בתוקף עד', 'permit_until', w?.permit_until || '', { type: 'date', req: true })}</div>
         <p class="small mut">הדרכה נוספת של 8 שעות במוסד הכשרה מוכר, בשפת העובד, לפני תום חודש מהכניסה לישראל (תקנה 3א לתקנות ההדרכה):</p>
         <div class="grid g2">${field('תאריך ההדרכה', 'f8_date', w?.f8_date || '', { type: 'date' })}${field('מוסד ההכשרה', 'f8_institution', w?.f8_institution || '')}</div>
-        <label class="fld"><span>אישור המוסד (צילום)</span><input type="file" name="f8_file" accept="image/*,application/pdf" capture="environment"></label></div>
-      <label class="chk"><input type="checkbox" name="height" ${w?.height ? 'checked' : ''}> עובד בגובה</label>
-      <div class="sub-f" data-for="height">
-        <div class="grid g2">${field('אישור עבודה בגובה בתוקף עד', 'height_until', w?.height_until || '', { type: 'date', req: true, hint: 'האישור תקף עד שנתיים (תקנה 6(ג) לתקנות העבודה בגובה)' })}
-          <label class="fld"><span>צילום האישור${w?.height_path ? ' (קיים. אפשר להחליף)' : ' <b class="req">*</b>'}</span><input type="file" name="height_file" accept="image/*,application/pdf" capture="environment"></label></div></div>
+        ${fileField('אישור המוסד', 'f8_file')}</div>
+      <h3>אישור עבודה בגובה <b class="req">*</b></h3>
+      ${hx ? `<div class="banner">העובד הוחרג מאישור עבודה בגובה: ${esc(hx.reason)} (${esc(hx.approver_name || hx.approved_by_email || '')})</div>` : ''}
+      <div class="grid g2">${field('האישור בתוקף עד', 'height_until', w?.height_until || '', { type: 'date', hint: 'תקף עד שנתיים (תקנה 6(ג) לתקנות העבודה בגובה)' })}
+        ${fileField('צילום האישור' + (w?.height_path ? ' (קיים. אפשר להחליף)' : ''), 'height_file')}</div>
+      ${!hx && !w?.height ? `<label class="chk"><input type="checkbox" name="no_height"> אין לעובד אישור כרגע</label>
+      <p class="small mut" data-noh hidden>העובד יסומן "אסור להעסיק" עד שמצרפים אישור, או עד ש${esc(exemptApprover(s.id))} מאשר החרגה בכרטיס העובד.</p>` : ''}
       ${w ? `<label class="chk"><input type="checkbox" name="active" ${w.active === false ? '' : 'checked'}> פעיל באתר</label>` : ''}`,
     onMount: el => {
-      const sync = () => $$('.sub-f', el).forEach(b => b.hidden = !$(`[name=${b.dataset.for}]`, el).checked);
-      $$('[name=foreign_worker],[name=height]', el).forEach(x => x.addEventListener('change', sync)); sync();
+      const sync = () => { $$('.sub-f', el).forEach(b => b.hidden = !$(`[name=${b.dataset.for}]`, el).checked); const nh = $('[name=no_height]', el); if (nh) $('[data-noh]', el).hidden = !nh.checked; };
+      $$('[name=foreign_worker],[name=no_height]', el).forEach(x => x.addEventListener('change', sync)); sync();
     },
     validate: (d, f) => {
       form = f;
@@ -91,12 +98,14 @@ export async function workerForm(s, w = null, { after } = {}) {
         if (!d.entry_date || !d.permit_until) return 'לעובד זר צריך תאריך כניסה לישראל ותוקף היתר';
         if (d.f8_date && !d.f8_institution?.trim()) return 'צריך את שם מוסד ההכשרה של הדרכת 8 השעות';
       }
-      if (d.height) {
-        if (!d.height_until) return 'צריך תוקף לאישור העבודה בגובה';
-        if (!w?.height_path && !f.height_file.files[0]) return 'חובה לצרף צילום של אישור העבודה בגובה';
+      const hasFile = !!(w?.height_path || f.height_file.files[0]);
+      if (d.height_until || f.height_file.files[0]) {
+        if (!d.height_until) return 'צריך את תאריך התוקף של אישור העבודה בגובה';
+        if (!hasFile) return 'צריך לצלם את אישור העבודה בגובה';
+        if ((d.height_until !== w?.height_until || f.height_file.files[0]) && d.height_until < today()) return 'אישור העבודה בגובה כבר פג. צריך אישור בתוקף';
         const max = new Date(); max.setFullYear(max.getFullYear() + 2); max.setDate(max.getDate() + 1);
         if (d.height_until > max.toISOString().slice(0, 10)) return 'אישור עבודה בגובה תקף עד שנתיים. בדקו את התאריך';
-      }
+      } else if (!hx && !w?.height && !d.no_height) return 'כל עובד באתר צריך אישור עבודה בגובה. מצלמים את האישור, או מסמנים "אין לעובד אישור כרגע"';
       return null;
     } });
   if (!v) return;
@@ -106,13 +115,14 @@ export async function workerForm(s, w = null, { after } = {}) {
     nationality: v.foreign_worker ? v.nationality.trim() : null, entry_date: v.foreign_worker ? v.entry_date || null : null,
     permit_no: v.foreign_worker ? v.permit_no.trim() : null, permit_until: v.foreign_worker ? v.permit_until || null : null,
     f8_date: v.foreign_worker ? v.f8_date || null : null, f8_institution: v.foreign_worker ? v.f8_institution.trim() || null : null,
-    height: !!v.height, height_until: v.height ? v.height_until : null };
+    height: !!v.height_until, height_until: v.height_until || null };
   if (w) row.active = !!v.active;
   try {
     toast('שומר…');
     const f = n => form?.elements?.[n]?.files?.[0];
     if (f('id_photo')) row.id_photo_path = await putWorkerFile(s.id, wid, 'id', f('id_photo'));
-    if (v.height && f('height_file')) row.height_path = await putWorkerFile(s.id, wid, 'height', f('height_file'));
+    if (v.height_until && f('height_file')) row.height_path = await putWorkerFile(s.id, wid, 'height', f('height_file'));
+    if (!v.height_until) row.height_path = null;
     if (v.foreign_worker && f('f8_file')) row.f8_path = await putWorkerFile(s.id, wid, 'f8', f('f8_file'));
     if (w) { const r = await db.update('workers', w.id, row); Object.assign(w, r); }
     else { const [r] = await db.insert('workers', { id: wid, ...row }); (S.data.workers ||= []).push(r); }
@@ -127,12 +137,12 @@ const normId = (t, v) => t === 'il' ? String(v).replace(/\D/g, '').padStart(9, '
 // ===== כרטיס עובד =====
 function workerCard(s, wid) {
   const w = workersOf(s.id).find(x => x.id === wid); if (!w) return;
-  const st = workerStatus(w), la = lastAnnual(w);
+  const st = workerStatus(w), la = lastAnnual(w), hx = heightExemption(w), canX = canExemptHeight(s.id), reg = canRegister(s.id);
   const sigs = sigsOfWorker(w.id).sort((a, b) => String(b.signed_at).localeCompare(String(a.signed_at)));
   const tr = id => (S.data.trainings || []).find(t => t.id === id);
   const el = h(`<div class="ov" role="dialog" aria-modal="true"><div class="dlg wide"><div class="dlg-h"><h3>${esc(w.name)}</h3><button class="x" aria-label="סגירה" data-x>✕</button></div>
     <div class="dlg-b">
-      <div class="dh">${stChip(st)}${w.foreign_worker ? '<span class="chip">עובד זר</span>' : ''}${w.height ? '<span class="chip">עבודה בגובה</span>' : ''}</div>
+      <div class="dh">${stChip(st)}${isPresent(w.id) ? '<span class="chip blue">באתר היום</span>' : ''}${w.foreign_worker ? '<span class="chip">עובד זר</span>' : ''}</div>
       ${st.issues.length && st.lv !== 'off' ? `<div class="banner ${st.lv === 'bad' ? 'crit' : ''}">${esc(st.issues.join(' · '))}</div>` : ''}
       <div class="kv">
         <span>תעודה</span><b dir="ltr" style="text-align:right">${esc(idLabel(w))}</b>
@@ -140,11 +150,16 @@ function workerCard(s, wid) {
         <span>חברה</span><b>${esc(w.company || '—')}</b><span>מקצוע</span><b>${esc(w.trade || '—')}</b>
         ${w.phone ? `<span>טלפון</span><b dir="ltr" style="text-align:right">${esc(w.phone)}</b>` : ''}
         <span>הדרכה פרונטלית אחרונה</span><b>${la ? fmtDT(la) + ' · הבאה עד ' + fmtDate(new Date(new Date(la).getTime() + 365 * 864e5)) : '<span class="neg">לא הודרך</span>'}</b>
-        ${w.height ? `<span>אישור עבודה בגובה</span><b>בתוקף עד ${esc(fmtDate(w.height_until))}</b>` : ''}
+        <span>אישור עבודה בגובה</span><b>${hx ? `הוחרג באישור ${esc(hx.approver_name || hx.approved_by_email || '')} · ${fmtDT(hx.created_at)}<br><span class="small">${esc(hx.reason)}</span>` : w.height ? `עד ${esc(fmtDate(w.height_until))}` : '<span class="neg">אין אישור. אסור להעסיק</span>'}</b>
+        <span>נוכחות</span><b>${isPresent(w.id) ? 'באתר היום' : 'לא סומן היום'} · ${daysPresent(w.id)} ימים ב-30 הימים האחרונים</b>
         ${w.foreign_worker ? `<span>אזרחות</span><b>${esc(w.nationality || '—')}</b><span>כניסה לישראל</span><b>${esc(fmtDate(w.entry_date))}</b>
           <span>היתר</span><b>${esc(w.permit_no || '')} · עד ${esc(fmtDate(w.permit_until))}</b>
           <span>הדרכת 8 שעות</span><b>${w.f8_date ? esc(fmtDate(w.f8_date) + ' · ' + (w.f8_institution || '')) : `<span class="neg">לא הוזנה. עד ${esc(fmtDate(new Date(new Date(w.entry_date).getTime() + 30 * 864e5)))}</span>`}</b>` : ''}
         <span>נרשם</span><b>${fmtDT(w.created_at)} · ${esc(w.added_by_email || '')}</b></div>
+      ${w.active !== false && (reg || canX) ? `<div class="actions">${reg && !hx ? `<button type="button" class="btn" data-hcert>📷 ${w.height ? 'חידוש' : 'צירוף'} אישור עבודה בגובה</button>` : ''}
+        ${canX && !hx && !w.height ? '<button type="button" class="btn ghost" data-hx>החרגה מאישור עבודה בגובה</button>' : ''}
+        ${canX && hx ? '<button type="button" class="btn ghost" data-hxc>ביטול ההחרגה</button>' : ''}</div>
+        ${!w.height && !hx && !canX ? `<p class="small mut">החרגה מאישור עבודה בגובה רק באישור ${esc(exemptApprover(s.id))}.</p>` : ''}` : ''}
       <div class="actions"><button type="button" class="btn small ghost" data-f="${esc(w.id_photo_path)}">צילום התעודה</button>
         ${w.height_path ? `<button type="button" class="btn small ghost" data-f="${esc(w.height_path)}">אישור עבודה בגובה</button>` : ''}
         ${w.f8_path ? `<button type="button" class="btn small ghost" data-f="${esc(w.f8_path)}">אישור הדרכת 8 שעות</button>` : ''}</div>
@@ -158,6 +173,98 @@ function workerCard(s, wid) {
   $$('[data-x2]', el).forEach(b => b.addEventListener('click', () => el.remove()));
   $$('[data-f]', el).forEach(b => b.onclick = () => openFile(b.dataset.f));
   $('[data-edit]', el)?.addEventListener('click', () => { el.remove(); workerForm(s, w); });
+  $('[data-hcert]', el)?.addEventListener('click', () => { el.remove(); heightCertForm(s, w); });
+  $('[data-hx]', el)?.addEventListener('click', () => { el.remove(); exemptForm(s, w, false); });
+  $('[data-hxc]', el)?.addEventListener('click', () => { el.remove(); exemptForm(s, w, true); });
+}
+
+// צירוף או חידוש אישור עבודה בגובה ישר מהכרטיס (צילום בשטח)
+async function heightCertForm(s, w) {
+  let form = null;
+  const v = await modal({ title: `אישור עבודה בגובה · ${w.name}`, ok: 'שמירה',
+    body: `${fileField('צילום האישור', 'height_file', { req: true })}
+      ${field('האישור בתוקף עד', 'height_until', '', { type: 'date', req: true, hint: 'תקף עד שנתיים (תקנה 6(ג) לתקנות העבודה בגובה)' })}`,
+    validate: (d, f) => {
+      form = f;
+      if (!f.height_file.files[0]) return 'צריך לצלם את האישור';
+      if (!d.height_until) return 'צריך את תאריך התוקף';
+      if (d.height_until < today()) return 'האישור כבר פג. צריך אישור בתוקף';
+      const max = new Date(); max.setFullYear(max.getFullYear() + 2); max.setDate(max.getDate() + 1);
+      if (d.height_until > max.toISOString().slice(0, 10)) return 'אישור עבודה בגובה תקף עד שנתיים. בדקו את התאריך';
+      return null;
+    } });
+  if (!v) return workerCard(s, w.id);
+  try {
+    toast('שומר…');
+    const path = await putWorkerFile(s.id, w.id, 'height', form.elements.height_file.files[0]);
+    const r = await db.update('workers', w.id, { height: true, height_until: v.height_until, height_path: path });
+    Object.assign(w, r); await syncSite(s, false); toast('האישור נשמר'); render();
+  } catch (e) { toast(e.message, 'bad'); }
+}
+
+// החרגה מאישור עבודה בגובה, או ביטול שלה. רק מנהל האתר, ובאתר בלי מנהל אתר הנהלת הקבלן הראשי או מנהל השירות
+async function exemptForm(s, w, cancel) {
+  if (!canExemptHeight(s.id)) return toast(`רק ${exemptApprover(s.id)} מאשר החרגה`, 'bad');
+  const me = S.data.site_people.find(p => p.site_id === s.id && p.active !== false && (p.email || '').toLowerCase() === (S.user?.email || '').toLowerCase());
+  const v = await modal({ title: cancel ? `ביטול החרגה · ${w.name}` : `החרגה מאישור עבודה בגובה · ${w.name}`, ok: cancel ? 'ביטול ההחרגה' : 'אישור ההחרגה',
+    body: `${cancel ? '<p>אחרי הביטול העובד יסומן "אסור להעסיק" עד שמצרפים אישור עבודה בגובה בתוקף.</p>' : `<p class="small mut">כל עובד באתר צריך אישור עבודה בגובה. ההחרגה נרשמת עם שמך, הסיבה והשעה, ואי אפשר למחוק אותה. אפשר לבטל אותה בהמשך.</p>`}
+      ${area(cancel ? 'סיבת הביטול' : 'למה העובד לא צריך אישור (למשל: עובד רק במפלס הקרקע)', 'reason')}
+      ${field('שם המאשר', 'approver_name', me?.name?.replace(/ \(.*\)$/, '') || '', { req: true })}`,
+    validate: d => (d.reason || '').trim().length < 5 ? 'צריך לכתוב סיבה' : !d.approver_name?.trim() ? 'צריך שם מאשר' : null });
+  if (!v) return workerCard(s, w.id);
+  try {
+    const [r] = await db.insert('worker_exemptions', { site_id: s.id, worker_id: w.id, kind: 'height', cancel: !!cancel, reason: v.reason.trim(), approver_name: v.approver_name.trim(),
+      approver_role: myRolesLabel(s.id), approved_by_email: S.user?.email || '', created_at: new Date().toISOString() });
+    (S.data.worker_exemptions ||= []).push(r);
+    await syncSite(s, false); toast(cancel ? 'ההחרגה בוטלה' : 'ההחרגה נרשמה'); render();
+  } catch (e) { toast(e.message, 'bad'); }
+}
+const myRolesLabel = siteId => S.data.site_people.some(p => p.site_id === siteId && p.role === 'sm' && p.active !== false) ? 'sm' : hasRole(siteId, 'con') && !hasRole(siteId, 'admin') ? 'con' : 'admin';
+
+// ===== נוכחות יומית =====
+function attendanceScreen(s) {
+  const day = israelDay(), can = canRegister(s.id);
+  const ws = workersOf(s.id).filter(w => w.active !== false).map(w => ({ w, st: workerStatus(w), on: isPresent(w.id, day) }));
+  ws.sort((a, b) => b.on - a.on || a.w.name.localeCompare(b.w.name, 'he'));
+  const prev = lastAttendanceDay(s.id, day);
+  const el = h(`<div>
+    <a class="small" href="#/site/${s.id}/workers">→ חזרה לעובדים והדרכות</a>
+    <div class="card"><h2>נוכחות היום <span class="mut small" data-cnt></span></h2>
+      <p class="small mut">${new Date().toLocaleDateString('he-IL', { weekday: 'long', day: '2-digit', month: '2-digit', year: 'numeric' })}. ${can ? 'לוחצים על כל עובד שנמצא היום באתר. ' : ''}עובד שאסור להעסיק לא יכול להיות מסומן באתר.</p>
+      ${can && prev ? `<button class="btn ghost" data-same>כולם כמו ב-${esc(fmtDate(prev))}</button>` : ''}
+      <div class="att">${ws.map(({ w, st, on }) => `<div class="arow" data-row="${w.id}"><div><b>${esc(w.name)}</b> ${st.lv === 'bad' || st.lv === 'warn' ? stChip(st) : ''}
+          <div class="small mut">${esc([w.company, w.trade].filter(Boolean).join(' · '))}</div>
+          ${st.lv === 'bad' ? `<div class="small neg">${esc(st.issues.join(' · '))}</div>` : ''}</div>
+        ${can ? `<button type="button" class="btn tgl ${on ? 'on' : ''}" data-att="${w.id}" ${st.lv === 'bad' && !on ? 'disabled' : ''}>${on ? '✓ באתר' : 'לא באתר'}</button>` : `<span class="chip ${on ? 'green' : ''}">${on ? 'באתר' : 'לא סומן'}</span>`}</div>`).join('') || '<div class="empty">אין עובדים פעילים. רושמים עובדים בלשונית העובדים.</div>'}</div></div></div>`);
+  const count = () => { $('[data-cnt]', el).textContent = `${ws.filter(x => isPresent(x.w.id, day)).length} באתר מתוך ${ws.length}`; };
+  const paint = (b, on) => { b.classList.toggle('on', on); b.textContent = on ? '✓ באתר' : 'לא באתר'; };
+  count();
+  $$('[data-att]', el).forEach(b => b.onclick = async () => {
+    const x = ws.find(q => q.w.id === b.dataset.att), on = !isPresent(x.w.id, day);
+    if (on && x.st.lv === 'bad') return toast('אסור להעסיק את העובד: ' + x.st.issues[0], 'bad');
+    b.disabled = true;
+    try { await markAttendance(s, x.w, on, day); paint(b, on); count(); } catch (e) { toast(e.message.includes('attendance_day') ? 'אפשר לסמן נוכחות רק להיום' : e.message, 'bad'); }
+    b.disabled = !on && x.st.lv === 'bad';
+  });
+  $('[data-same]', el)?.addEventListener('click', async e => {
+    e.target.disabled = true;
+    const was = new Set(attendanceOf(s.id, prev).filter(a => a.present).map(a => a.worker_id));
+    let n = 0, skip = 0;
+    for (const x of ws) {
+      if (!was.has(x.w.id) || isPresent(x.w.id, day)) continue;
+      if (x.st.lv === 'bad') { skip++; continue; }
+      try { await markAttendance(s, x.w, true, day); n++; const b = $(`[data-att="${x.w.id}"]`, el); if (b) paint(b, true); } catch (er) { toast(er.message, 'bad'); break; }
+    }
+    count(); e.target.disabled = false;
+    toast(`סומנו ${n} עובדים${skip ? `. ${skip} לא סומנו כי אסור להעסיק אותם` : ''}`, skip ? 'bad' : 'ok');
+  });
+  return el;
+}
+export async function markAttendance(s, w, present, day = israelDay()) {
+  const cur = (S.data.attendance || []).find(a => a.worker_id === w.id && a.day === day);
+  if (cur) { const r = await db.update('attendance', cur.id, { present }); Object.assign(cur, r); return cur; }
+  const [r] = await db.insert('attendance', { site_id: s.id, worker_id: w.id, day, present, marked_by_email: S.user?.email || '', marked_at: new Date().toISOString() });
+  (S.data.attendance ||= []).push(r); return r;
 }
 
 // ===== הדרכה =====

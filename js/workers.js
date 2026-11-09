@@ -1,7 +1,7 @@
 // פנקס עובדים, הדרכות וציוד: חישובי תוקף, סטטוס עובד, חובות תוקף אוטומטיות, תמונות ו-PDF
 import { db } from './db.js';
 import { CAT, LAW } from './duties.js';
-import { S } from './app.js';
+import { S, myRoles, hasRole } from './app.js';
 
 const DAY = 864e5;
 const D = () => S.data;
@@ -49,6 +49,28 @@ export const equipmentOf = siteId => (D().equipment || []).filter(e => e.site_id
 export const inspectionsOf = eid => (D().inspections || []).filter(x => x.equipment_id === eid).sort((a, b) => String(b.inspected_at).localeCompare(String(a.inspected_at)) || String(b.created_at).localeCompare(String(a.created_at)));
 export const lastInspection = eid => inspectionsOf(eid)[0] || null;
 
+// ===== נוכחות יומית =====
+// היום לפי שעון ישראל (YYYY-MM-DD), כמו בשרת
+export const israelDay = (t = new Date()) => new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Jerusalem' }).format(t);
+export const attendanceOf = (siteId, day) => (D().attendance || []).filter(a => a.site_id === siteId && (!day || a.day === day));
+export const isPresent = (wid, day = israelDay()) => !!(D().attendance || []).find(a => a.worker_id === wid && a.day === day && a.present);
+export const daysPresent = (wid, days = 30) => { const from = israelDay(new Date(Date.now() - days * DAY)); return (D().attendance || []).filter(a => a.worker_id === wid && a.present && a.day > from).length; };
+// היום האחרון לפני היום שבו סומנה נוכחות באתר
+export function lastAttendanceDay(siteId, before = israelDay()) {
+  return attendanceOf(siteId).filter(a => a.day < before && a.present).map(a => a.day).sort().pop() || null;
+}
+
+// ===== אישור עבודה בגובה: חובה לכל עובד, החרגה באישור בלבד =====
+// ההחלטה האחרונה על העובד (החרגה או ביטול). מחזיר את ההחרגה אם היא בתוקף
+export function heightExemption(w) {
+  const last = (D().worker_exemptions || []).filter(x => x.worker_id === w.id && x.kind === 'height').sort((a, b) => String(a.created_at).localeCompare(String(b.created_at))).pop();
+  return last && !last.cancel ? last : null;
+}
+export const siteHasSm = siteId => (D().site_people || []).some(p => p.site_id === siteId && p.role === 'sm' && p.active !== false);
+// מי מאשר החרגה: באתר עם מנהל אתר, רק מנהל האתר. בלי מנהל אתר: הנהלת הקבלן הראשי או מנהל השירות
+export const canExemptHeight = siteId => siteHasSm(siteId) ? myRoles(siteId).includes('sm') : hasRole(siteId, 'con');
+export const exemptApprover = siteId => siteHasSm(siteId) ? 'מנהל האתר' : 'הנהלת הקבלן הראשי או מנהל השירות';
+
 // ההדרכה הפרונטלית האחרונה של העובד (תאריך החתימה)
 export function lastAnnual(w) {
   const ids = new Set((D().trainings || []).filter(t => COUNTS_ANNUAL.includes(t.kind)).map(t => t.id));
@@ -65,7 +87,10 @@ export function workerDeadlines(w) {
   const out = [];
   const la = lastAnnual(w);
   out.push(['exp_train', la ? dms(la) + 365 * DAY : dms(w.created_at), la ? `הדרכת בטיחות שנתית: ${w.name}` : `הדרכה לפני תחילת עבודה: ${w.name}`]);
-  if (w.height && w.height_until) out.push(['exp_height', dms(w.height_until) + DAY - 1, `אישור עבודה בגובה: ${w.name}`]);
+  if (!heightExemption(w)) {
+    if (w.height && w.height_until) out.push(['exp_height', dms(w.height_until) + DAY - 1, `אישור עבודה בגובה: ${w.name}`]);
+    else out.push(['exp_height', dms(w.created_at), `חסר אישור עבודה בגובה: ${w.name}`]);
+  }
   if (w.foreign_worker && w.permit_until) out.push(['exp_permit', dms(w.permit_until) + DAY - 1, `היתר עבודה של עובד זר: ${w.name}`]);
   if (w.foreign_worker && w.entry_date && !w.f8_date) out.push(['exp_f8', dms(w.entry_date) + 30 * DAY, `הדרכת 8 שעות לעובד זר: ${w.name}`]);
   return out;
@@ -78,7 +103,7 @@ export function workerStatus(w, now = Date.now()) {
   for (const [k, due] of workerDeadlines(w)) {
     const name = { exp_train: lastAnnual(w) ? 'הדרכה שנתית' : 'לא הודרך', exp_height: 'אישור עבודה בגובה', exp_permit: 'היתר עובד זר', exp_f8: 'הדרכת 8 שעות לעובד זר' }[k];
     const warn = CAT[k].warnH * 36e5;
-    if (due <= now) issues.push(k === 'exp_train' && !lastAnnual(w) ? 'לא הודרך: אסור להעסיק' : name + (k === 'exp_f8' ? ': עבר המועד' : ': פג תוקף'));
+    if (due <= now) issues.push(k === 'exp_train' && !lastAnnual(w) ? 'לא הודרך: אסור להעסיק' : k === 'exp_height' && !w.height ? 'אין אישור עבודה בגובה' : name + (k === 'exp_f8' ? ': עבר המועד' : ': פג תוקף'));
     else if (due - now <= warn) soon.push(`${name}: נגמר ב-${new Date(due).toLocaleDateString('he-IL')}`);
   }
   const a = age(w.birth_date);
@@ -100,7 +125,12 @@ export function syncExpiry(site, duties, now = Date.now()) {
   for (const d of duties.filter(x => x.site_id === site.id && x.kind === 'expiry' && x.status === 'open')) {
     seen.add(d.key);
     const w = want.get(d.key);
-    if (!w) { upd.push({ id: d.id, status: 'na', na_reason: 'העובד או הציוד כבר לא פעילים באתר, או שהדרישה הוסרה', closed_at: iso(now) }); continue; }
+    if (!w) {
+      const wk = d.key.startsWith('exp_height:') && workersOf(site.id).find(x => x.id === d.key.split(':')[1] && x.active !== false);
+      const ex = wk && heightExemption(wk);
+      upd.push({ id: d.id, status: 'na', na_reason: ex ? `החרגה מאישור עבודה בגובה באישור ${ex.approver_name || ex.approved_by_email || ''}: ${ex.reason}` : 'העובד או הציוד כבר לא פעילים באתר, או שהדרישה הוסרה', closed_at: iso(now) });
+      continue;
+    }
     if (Math.abs(dms(d.due_at) - w.due) > 6e4) {
       // חודש: סוגרים את המופע הישן ופותחים חדש עם התוקף החדש
       upd.push({ id: d.id, status: 'done', done_at: iso(now), closed_at: iso(now), done_by: 'עדכון אוטומטי מפנקס העובדים / הציוד',

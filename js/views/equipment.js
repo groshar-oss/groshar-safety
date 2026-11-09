@@ -1,7 +1,7 @@
 // ציוד ותסקירים: מכונות הרמה ואביזרי הרמה, תסקיר אחרון ומועד הבדיקה הבאה. כל תסקיר נשמר כשורה (היסטוריה מלאה)
 import { db, uuid } from '../db.js';
 import { S, hasRole, syncSite, render } from '../app.js';
-import { esc, h, $, $$, toast, modal, field, select, area, fmtDate } from '../util.js';
+import { esc, h, $, $$, toast, modal, field, select, area, fmtDate, fileField } from '../util.js';
 import { EQUIP_KINDS, equipmentOf, inspectionsOf, lastInspection, nextDueFor, putEquipFile } from '../workers.js';
 import { openFile } from './common.js';
 
@@ -44,7 +44,7 @@ async function equipForm(s) {
       <h3>התסקיר האחרון</h3>
       <div class="grid g2">${field('תאריך הבדיקה', 'inspected_at', '', { type: 'date' })}${field('בתוקף עד', 'next_due', '', { type: 'date', hint: 'מתמלא לבד לפי הסוג. אם בתסקיר כתוב מועד מוקדם יותר, משנים' })}</div>
       ${field('הבודק המוסמך', 'inspector', '')}
-      <label class="fld"><span>צילום / PDF של התסקיר</span><input type="file" name="cert" accept="image/*,application/pdf" capture="environment"></label>
+      ${fileField('צילום / PDF של התסקיר', 'cert')}
       <p class="small mut">אפשר לשמור בלי תסקיר, אבל הציוד יסומן "אין תסקיר" ותיפתח התראה קריטית עד שמזינים אותו.</p>`,
     onMount: el => { const upd = () => { const k = $('[name=kind]', el).value, d = $('[name=inspected_at]', el).value; if (d && nextDueFor(k, d)) $('[name=next_due]', el).value = nextDueFor(k, d); };
       $('[name=kind]', el).addEventListener('change', upd); $('[name=inspected_at]', el).addEventListener('change', upd); },
@@ -80,7 +80,7 @@ async function inspForm(s, e) {
     body: `<input type="hidden" name="kind" value="${esc(e.kind)}">
       <div class="grid g2">${field('תאריך הבדיקה', 'inspected_at', new Date().toISOString().slice(0, 10), { type: 'date', req: true })}${field('בתוקף עד', 'next_due', nextDueFor(e.kind, new Date().toISOString().slice(0, 10)), { type: 'date', req: true })}</div>
       ${field('הבודק המוסמך', 'inspector', lastInspection(e.id)?.inspector || '', { req: true })}
-      <label class="fld"><span>צילום / PDF של התסקיר <b class="req">*</b></span><input type="file" name="cert" accept="image/*,application/pdf" capture="environment"></label>
+      ${fileField('צילום / PDF של התסקיר', 'cert', { req: true })}
       ${area('הערות הבודק (אם יש)', 'note')}`,
     onMount: el => $('[name=inspected_at]', el).addEventListener('change', x => { const n = nextDueFor(e.kind, x.target.value); if (n) $('[name=next_due]', el).value = n; }),
     validate: (d, f) => { form = f; return inspCheck(d, f); } });

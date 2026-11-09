@@ -88,3 +88,25 @@ export const numOrNull = v => (v === '' || v === null || v === undefined) ? null
 export function store(key, val) {
   try { if (val === undefined) return JSON.parse(localStorage.getItem(key) || 'null'); localStorage.setItem(key, JSON.stringify(val)); } catch { return null; }
 }
+
+// ===== שדה קובץ עם מצלמה: כפתור "צילום" שפותח את המצלמה ישר, וכפתור "קובץ" לבחירה מהגלריה או מהמחשב =====
+// הקובץ נשמר בשדה אחד (name), כך שהטופס קורא אותו כרגיל: form.elements[name].files[0]
+export const fileField = (label, name, { req = false, accept = 'image/*,application/pdf', note = '' } = {}) =>
+  `<div class="fld ff" data-ff><span>${label}${req ? ' <b class="req">*</b>' : ''}</span>
+    <div class="ffb"><button type="button" class="btn ffcam" data-cam>📷 צילום</button><label class="btn ghost ffpick">📎 קובץ<input type="file" name="${name}" accept="${accept}" class="ffin"></label></div>
+    <div class="ffname small mut">${note || 'לא נבחר קובץ'}</div></div>`;
+if (typeof document !== 'undefined' && !window.__ffWired) {
+  window.__ffWired = true;
+  document.addEventListener('click', e => {
+    const b = e.target.closest?.('[data-cam]'); if (!b) return;
+    const real = b.closest('[data-ff]')?.querySelector('input[type=file]'); if (!real) return;
+    const t = document.createElement('input'); t.type = 'file'; t.accept = 'image/*'; t.setAttribute('capture', 'environment'); t.style.display = 'none';
+    t.onchange = () => { if (t.files?.[0]) { try { real.files = t.files; } catch { /* דפדפן ישן */ } real.dispatchEvent(new Event('change', { bubbles: true })); } t.remove(); };
+    document.body.appendChild(t); t.click();
+  });
+  document.addEventListener('change', e => {
+    const i = e.target; if (!i.matches?.('[data-ff] input[type=file]')) return;
+    const f = i.files?.[0], n = i.closest('[data-ff]').querySelector('.ffname');
+    if (n) { n.textContent = f ? '✓ ' + (f.name || 'צילום') : 'לא נבחר קובץ'; n.classList.toggle('ok-t', !!f); }
+  });
+}

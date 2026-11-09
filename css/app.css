@@ -414,3 +414,18 @@ details summary{cursor:pointer;font-size:13px;font-weight:600;margin-top:8px}
 .rrow{display:flex;justify-content:space-between;gap:12px;padding:10px 0;border-bottom:1px solid var(--line);text-decoration:none;color:inherit}
 .rrow:last-child{border-bottom:0}.rr2{text-align:left;min-width:120px;flex:0 0 auto}
 @media (max-width:760px){.rrow{flex-direction:column;gap:4px}.rr2{text-align:right}}
+/* חבילה 1.6: מצלמה, נוכחות, מה עושים, ביקורת */
+.ff .ffb{display:flex;gap:8px;flex-wrap:wrap}.ff .ffb .btn{flex:1;min-height:46px;font-size:15px;justify-content:center}
+.ffpick{position:relative;overflow:hidden;cursor:pointer}.ffpick input{position:absolute;inset:0;opacity:0;width:100%;height:100%;cursor:pointer}
+.ffname{margin-top:2px}.ffname.ok-t{color:#13804a;font-weight:600}
+.att{display:flex;flex-direction:column;gap:8px;margin-top:12px}
+.arow{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:10px 12px;border:1px solid var(--line);border-radius:12px;background:var(--card)}
+.arow>div{min-width:0}.btn.tgl{min-width:118px;min-height:48px;font-size:15px;background:var(--th);color:var(--ink);border-color:var(--line)}
+.btn.tgl.on{background:#13804a;border-color:#13804a;color:#fff}.btn.tgl:disabled{opacity:.45}
+.todo-box{border:1px solid #c9d6e6;background:#eef3f9;border-radius:12px;padding:10px 12px;margin:10px 0}.todo-box>b{color:#1C3A5E}.todo-box p{margin:4px 0 0}
+.duty .dtodo{font-size:12.5px;margin-top:6px;color:var(--ink)}.duty .dtodo b{color:#1C3A5E}.duty .dgo{display:inline-block;margin-top:6px;font-size:13px;font-weight:700;color:var(--acc)}
+.banner .actions{margin-top:8px}.tbl-wrap{overflow-x:auto;-webkit-overflow-scrolling:touch}.tbl-wrap td{min-width:70px}
+.bb small{font-size:12px;font-weight:600;color:var(--mut)}.att-sum h2{margin:0}
+:root[data-theme=dark] .todo-box{background:#1d2a3a;border-color:#2e4560}:root[data-theme=dark] .todo-box>b,:root[data-theme=dark] .duty .dtodo b{color:#9fc1e6}
+@media (prefers-color-scheme:dark){:root:not([data-theme=light]) .todo-box{background:#1d2a3a;border-color:#2e4560}:root:not([data-theme=light]) .todo-box>b,:root:not([data-theme=light]) .duty .dtodo b{color:#9fc1e6}}
+@media (max-width:700px){.itbl thead{display:none}.itbl,.itbl tbody{display:block}.itbl tr{display:block;border:1px solid var(--line);border-radius:10px;margin-bottom:8px;padding:6px 4px}.itbl td{display:flex;gap:10px;border:0;padding:3px 6px;min-width:0!important}.itbl td::before{content:attr(data-l);color:var(--mut);font-weight:600;font-size:12px;min-width:92px;flex:none}.itbl td:empty{display:none}}

@@ -3,12 +3,13 @@ import { db } from '../db.js';
 import { S, canAct, canWaive, siteById, syncSite, render, hasRole } from '../app.js';
 import { CAT, LEVELS, ROLES, level, leftText, recipients, gateStatus, EVENTS } from '../duties.js';
 import { messageText, waLink, waShare, mailtoLink, logNotification, notifsFor } from '../alerts.js';
-import { esc, h, $, $$, modal, toast, field, area, fmtDate } from '../util.js';
+import { esc, h, $, $$, modal, toast, field, area, fmtDate, fileField } from '../util.js';
 import { checkinForm } from './checkin.js';
 import { NOTICES, GOV, CHANNEL, NST, noticeFor, needsApproval, ensureDraft, saveNotice, fieldsText, emptyFields } from '../notices.js';
 import { gReady, gmailSend, isEmail } from '../google.js';
 import { noticeLetter } from './docs.js';
 import { expiryLink } from '../workers.js';
+import { todoFor } from '../todo.js';
 
 export const fmtDT = t => t ? new Date(t).toLocaleString('he-IL', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' }) : '';
 export const chip = lv => `<span class="chip lv-${lv} ${LEVELS[lv].chip}">${LEVELS[lv].label}</span>`;
@@ -39,7 +40,8 @@ export function dutyCard(i, { showSite = false } = {}) {
     <div class="dt">${esc(i.title)}</div>
     <div class="dm">${i.status === 'open' ? esc(leftText(i)) + (i.due_at ? ' · ' + fmtDT(i.due_at) : '') : i.status === 'done' ? 'בוצע ' + fmtDate(i.done_at) : i.status === 'waived' ? 'נסגר בדחייה מוצדקת' : 'לא חל'}
       · אחראי: ${esc(r.roles.map(x => ROLES[x]).join(', '))}</div>
-    ${r.note ? `<div class="dn">${esc(r.note)}</div>` : ''}</a>`;
+    ${r.note ? `<div class="dn">${esc(r.note)}</div>` : ''}
+    ${i.status === 'open' && ['crit', 'red', 'warn', 'info'].includes(lv) ? `<div class="dtodo"><b>מה עושים:</b> ${esc(todoFor(i).text)}</div><span class="dgo">לטפל עכשיו ›</span>` : ''}</a>`;
 }
 
 // כפתורי שליחה: WhatsApp לכל נמען (נפתח עם הודעה מוכנה), מייל, העתקה
@@ -84,8 +86,14 @@ export async function openDuty(id) {
   const isGate = i.key === 'dev_start_approval', gate = gateStatus(S.data.duties.filter(d => d.site_id === i.site_id));
   if (NOTICES[i.key] && i.status === 'open' && act) { try { await ensureDraft(site, i); } catch (e) { console.warn('notice', e); } }
   const nt = NOTICES[i.key] ? noticeFor(i) : null;
+  const td = i.status === 'open' ? todoFor(i) : null;
+  const canDo = act && !(isGate && !gate.ready);
+  const tdBtn = !td ? '' : td.expiry ? `<a class="btn" href="${expiryLink(i)}" data-x2>${esc(td.label)}</a>`
+    : td.go ? `<a class="btn" href="#/site/${i.site_id}/${td.go}" data-x2>${esc(td.label)}</a>${canDo ? '<button type="button" class="btn ghost" data-done2>סימון כבוצע וצירוף ראיה</button>' : ''}`
+    : canDo && td.label ? `<button type="button" class="btn" data-done2>${esc(td.label)}</button>` : '';
   const body = `<div class="dd">
     <div class="dh">${chip(x.level)}${i.critical ? '<span class="chip red">חובה קריטית</span>' : ''}<span class="chip">${sideName(i.side)}</span><span class="chip violet">${esc(site.name)}</span></div>
+    ${td ? `<div class="todo-box"><b>מה עושים עכשיו</b><p>${esc(td.text)}</p>${tdBtn ? `<div class="actions">${tdBtn}</div>` : ''}${!act && !td.expiry && !td.go && td.label ? `<p class="small mut">את הסימון עושה: ${esc(x.roles.map(r => ROLES[r]).join(', '))}${x.to.length ? ' (' + esc(x.to.map(p => p.name).join(', ')) + ')' : ''}</p>` : ''}</div>` : ''}
     <p class="ref"><b>§</b> ${esc(i.ref)}</p>
     ${c.plain ? `<p>${esc(c.plain)}</p>` : ''}
     ${ev ? `<div class="note">נוצר מאירוע: <b>${esc(EVENTS[ev.type]?.label || ev.type)}</b> · ${fmtDT(ev.occurred_at)}${ev.description ? '<br>' + esc(ev.description) : ''}</div>` : ''}
@@ -109,7 +117,8 @@ export async function openDuty(id) {
   document.body.appendChild(el);
   const close = () => { el.remove(); const [, r, a, b, c2] = location.hash.split('/'); if (r === 'site' && c2) location.hash = `#/site/${a}/${b}`; };
   $$('[data-x]', el).forEach(b => b.onclick = close);
-  $('[data-x2]', el)?.addEventListener('click', () => el.remove());
+  $$('[data-x2]', el).forEach(b => b.addEventListener('click', () => el.remove()));
+  $('[data-done2]', el)?.addEventListener('click', () => $('[data-done]', el)?.click());
   wireSend(el, x);
   if (nt) wireNotice(el, nt, i, site, x, () => { el.remove(); openDuty(i.id); }, close);
   $('[data-file]', el)?.addEventListener('click', () => openFile(i.file_path));
@@ -216,7 +225,7 @@ async function completeDuty(i, pre = {}) {
       ${field(isVisit ? 'מועד הביקור' : 'מועד הביצוע', 'at', local, { type: 'datetime-local', req: true })}
       ${area('תיאור הביצוע', 'note', pre.note || (i.key === 'dev_start_approval' ? 'אני מאשר/ת בכתב להתחיל בעבודות הבנייה. כל תנאי תקנה 1א(א) התקיימו.' : ''))}
       ${field('מספר אסמכתה (אישור הגשה, מספר מסמך)', 'ref', pre.ref || '')}
-      <label class="fld"><span>קובץ ראיה (PDF, תמונה, מסמך)</span><input type="file" name="file" accept="image/*,application/pdf,.doc,.docx,.xlsx"></label>
+      ${fileField('צילום או קובץ ראיה (תמונה, PDF, מסמך)', 'file', { accept: 'image/*,application/pdf,.doc,.docx,.xlsx' })}
       <small class="mut">${c.evidence ? 'ראיה נדרשת: ' + esc(c.evidence) + '. ' : ''}צריך לצרף קובץ או מספר אסמכתה.</small>`,
     validate: (d, form) => { picked = form.file.files[0] || null; if (!d.note?.trim()) return 'צריך לתאר מה בוצע'; if (!d.ref?.trim() && !form.file.files[0]) return 'צריך לצרף קובץ או מספר אסמכתה'; if (new Date(d.at) > new Date(Date.now() + 6e4)) return 'מועד הביצוע לא יכול להיות בעתיד'; return null; },
   });

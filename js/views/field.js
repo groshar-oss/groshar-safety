@@ -4,8 +4,9 @@ import { exceptions } from '../alerts.js';
 import { esc, h, $, $$ } from '../util.js';
 import { dutyCard } from './common.js';
 import { checkinCard } from './checkin.js';
-import { workersOf, workerStatus, equipmentOf, lastInspection } from '../workers.js';
-import { canRegister, workerForm, newTraining } from './workers.js';
+import { workersOf, workerStatus, equipmentOf, lastInspection, isPresent } from '../workers.js';
+import { canRegister, workerForm, newTraining, canSeeWorkers } from './workers.js';
+import { canInspect } from './inspect.js';
 import { eventFormFor } from './site.js';
 import { store } from '../util.js';
 
@@ -37,12 +38,13 @@ export function viewField(siteId) {
     <h1>${esc(s.name)}</h1><div class="sub">${esc(s.address || '')} · ${new Date().toLocaleDateString('he-IL', { weekday: 'long', day: '2-digit', month: '2-digit' })}</div>
     ${checkinCard(s)}
     <div class="bigbtns">
-      ${reg ? `<button class="bb" data-newtr><span>✍</span>הדרכה חדשה</button><button class="bb" data-neww><span>＋</span>עובד חדש</button>` : ''}
+      ${reg ? `<a class="bb" href="#/site/${s.id}/workers/attendance"><span>☑</span>נוכחות היום <small>${ws.filter(x => isPresent(x.w.id)).length} באתר</small></a><button class="bb" data-newtr><span>✍</span>הדרכה חדשה</button><button class="bb" data-neww><span>＋</span>עובד חדש</button>` : ''}
+      ${canInspect(s.id) ? `<a class="bb" href="#/site/${s.id}/inspect"><span>🔍</span>ביקורת באתר</a>` : ''}
       <button class="bb danger" data-risk><span>⚠</span>דיווח סיכון</button>
     </div>
     <div class="card"><h2>לעשות היום <span class="mut small">${todo.length}</span></h2>
       ${todo.map(x => dutyCard(x.duty)).join('') || '<div class="empty">אין משימות פתוחות להיום 👍</div>'}</div>
-    ${ws.length || reg ? `<a class="card fsum" href="#/site/${s.id}/workers"><h2>עובדים <span class="mut small">${ws.length}</span></h2>
+    ${ws.length || reg ? `<a class="card fsum" href="#/site/${s.id}/workers"><h2>עובדים <span class="mut small">${ws.length}${canSeeWorkers(s.id) ? ` · באתר היום ${ws.filter(x => isPresent(x.w.id)).length}` : ''}</span></h2>
       <div>${blocked.length ? `<span class="chip red">${blocked.length} אסור להעסיק</span>` : ''}${soon.length ? `<span class="chip amber">${soon.length} פג בקרוב</span>` : ''}${!blocked.length && !soon.length ? '<span class="chip green">כולם בסדר</span>' : ''}</div>
       ${blocked.slice(0, 6).map(x => `<div class="small neg">${esc(x.w.name)}: ${esc(x.st.issues[0] || '')}</div>`).join('')}</a>` : ''}
     ${eqBad.length ? `<a class="card fsum" href="#/site/${s.id}/equipment"><h2>ציוד</h2>${eqBad.map(e => `<div class="small">${esc(e.name)}: ${lastInspection(e.id) ? 'תסקיר פג או פג בקרוב' : 'אין תסקיר'}</div>`).join('')}</a>` : ''}
