@@ -1,7 +1,6 @@
 {
   "name": "tzi-safety",
   "private": true,
-  "type": "module",
   "description": "צי הנדסה · ניהול בטיחות באתר. האתר עצמו סטטי (GitHub Pages); הקובץ הזה רק לבדיקות.",
   "scripts": {
     "check": "node tests/check-syntax.mjs",
