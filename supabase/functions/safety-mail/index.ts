@@ -1,4 +1,4 @@
-// שליחת המיילים של מערכת הבטיחות דרך Resend. מופעל כל 15 דקות מ-pg_cron (ראו supabase/mail.sql).
+// שליחת המיילים של מערכת הבטיחות דרך Resend. מופעל כל 15 דקות מ-pg_cron (ראו supabase/017c-mail.sql).
 // סוד אחד ב-Edge Function Secrets: RESEND_API_KEY. הסיסמה של ה-cron וההפעלה נשמרות בטבלה mail_settings (רק השרת קורא אותה)
 // @ts-nocheck
 import { plan, israelNow } from './core.js';

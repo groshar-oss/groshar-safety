@@ -458,11 +458,16 @@ create table if not exists signatures (
   created_at timestamptz not null default now()
 );
 create index if not exists signatures_doc on signatures(doc_type, doc_ref);
+drop trigger if exists signatures_no_delete on signatures;
 create trigger signatures_no_delete before delete on signatures for each row execute function no_delete();
+drop trigger if exists signatures_no_update on signatures;
 create trigger signatures_no_update before update on signatures for each row execute function no_update();
+drop trigger if exists signatures_audit on signatures;
 create trigger signatures_audit after insert on signatures for each row execute function audit_row();
 alter table signatures enable row level security;
+drop policy if exists p_sg_sel on signatures;
 create policy p_sg_sel on signatures for select using (can_see_site(site_id));
+drop policy if exists p_sg_ins on signatures;
 create policy p_sg_ins on signatures for insert with check (has_site_role(site_id, array['dev','con','rep','wm','sm','so']));
 revoke all on signatures from anon;
 grant select, insert on signatures to authenticated;
@@ -474,6 +479,7 @@ begin
   new.created_at := now();
   return new;
 end $$;
+drop trigger if exists signatures_stamp on signatures;
 create trigger signatures_stamp before insert on signatures for each row execute function signature_stamp();
 revoke execute on function signature_stamp() from public, anon, authenticated;
 -- פנקס עובדים, הדרכות עם חתימות, ציוד ותסקירים (חבילה 1.5)
@@ -719,7 +725,7 @@ drop policy if exists p_a_sel on audit_log;
 create policy p_a_sel on audit_log for select using (is_service_admin() or (site_id is not null and can_see_site(site_id)
   and (table_name not in ('workers','trainings') or can_see_workers(site_id))));
 
--- ===== חבילה 1.6 (supabase/field16.sql) =====
+-- ===== חבילה 1.6 (supabase/016-field.sql) =====
 -- חבילה 1.6: נוכחות יומית, אישור עבודה בגובה חובה עם החרגה באישור, ביקורת באתר
 -- להריץ פעם אחת ב-SQL Editor. בטוח להריץ שוב.
 
@@ -999,7 +1005,7 @@ revoke all on defects from anon;
 grant select, insert, update on defects to authenticated;
 
 -- חבילה 1.7 שלב ב: דוח ביקור בקר בטלפון, תיעוד תאונה עם הצהרות עדים חתומות
--- להריץ פעם אחת ב-SQL Editor, אחרי field17a.sql. בטוח להריץ שוב.
+-- להריץ פעם אחת ב-SQL Editor, אחרי 017a-field.sql. בטוח להריץ שוב.
 
 -- ===== 1. דוח ביקור בקר בטיחות =====
 create table if not exists bakar_reports (

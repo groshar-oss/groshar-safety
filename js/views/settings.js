@@ -5,6 +5,8 @@ import { settings, saveSettings, pendingEmails, autoEmail, sendDigest, digestFor
 import { gconf, setGconf, gConnect, gDisconnect, gReady, gEnabled, gmailSend, isEmail } from '../google.js';
 import { LEVELS } from '../duties.js';
 import { esc, h, $, $$, toast, store, select, field } from '../util.js';
+import { SCHEMA_EXPECTED } from '../schema-expected.js';
+import { schemaDiff } from '../schema-check.js';
 
 export function viewSettings() {
   const theme = store('safety-theme') || 'auto';
@@ -70,6 +72,7 @@ export function viewSettings() {
   $('#sendNow', el)?.addEventListener('click', async e => { e.target.disabled = true; try { const n = await autoEmail(); toast(`נשלחו ${n} מיילים`); } catch (x) { toast(x.message, 'bad'); } render(); });
   $('#digest', el)?.addEventListener('click', async e => { e.target.disabled = true; try { const n = await sendDigest(); toast(`נשלח סיכום ל-${n} נמענים`); } catch (x) { toast(x.message, 'bad'); } render(); });
   if (isAdmin()) serverCard(el);
+  if (isAdmin() && isCloud()) schemaCard(el);
   return el;
 }
 
@@ -100,5 +103,20 @@ async function serverCard(el) {
       if (error) return toast(error.message, 'bad');
       const a = document.createElement('a'); a.href = URL.createObjectURL(data); a.download = b.dataset.bk; a.click();
     });
-  } catch (e) { body.innerHTML = `<span class="neg">${esc(e.message || String(e))}</span><br><span class="mut">אם עוד לא הרצת את mail.sql, זה צפוי.</span>`; }
+  } catch (e) { body.innerHTML = `<span class="neg">${esc(e.message || String(e))}</span><br><span class="mut">אם עוד לא הרצת את supabase/017c-mail.sql, זה צפוי.</span>`; }
+}
+
+// בדיקת התקנה: האם כל העמודות שהקוד צריך קיימות במסד, ואיזה קובץ SQL להריץ אם לא
+async function schemaCard(el) {
+  const card = h(`<div class="card"><h2>בדיקת התקנה</h2><div data-body class="small">בודק…</div></div>`);
+  ($('.cols', el) || el).appendChild(card);
+  const body = $('[data-body]', card);
+  try {
+    const { missing, files } = schemaDiff(SCHEMA_EXPECTED, await db.rpc('schema_columns', {}));
+    body.innerHTML = missing.length
+      ? `<b class="neg">חסרות ${missing.length} עמודות.</b> להריץ ב-Supabase (SQL Editor), לפי הסדר: ${files.map(f => `<b dir="ltr">supabase/${esc(f)}</b>`).join(', ')}. כל הקבצים בטוחים להרצה חוזרת.`
+      : `<b class="pos">✓ המסד תואם לקוד</b> <span class="mut">(${Object.keys(SCHEMA_EXPECTED).length} עמודות)</span>`;
+  } catch {
+    body.innerHTML = '<b class="neg">לא ניתן לבדוק:</b> צריך להריץ ב-Supabase את <b dir="ltr">supabase/018-schema-check.sql</b>.';
+  }
 }

@@ -19,11 +19,16 @@ create table if not exists signatures (
   created_at timestamptz not null default now()
 );
 create index if not exists signatures_doc on signatures(doc_type, doc_ref);
+drop trigger if exists signatures_no_delete on signatures;
 create trigger signatures_no_delete before delete on signatures for each row execute function no_delete();
+drop trigger if exists signatures_no_update on signatures;
 create trigger signatures_no_update before update on signatures for each row execute function no_update();
+drop trigger if exists signatures_audit on signatures;
 create trigger signatures_audit after insert on signatures for each row execute function audit_row();
 alter table signatures enable row level security;
+drop policy if exists p_sg_sel on signatures;
 create policy p_sg_sel on signatures for select using (can_see_site(site_id));
+drop policy if exists p_sg_ins on signatures;
 create policy p_sg_ins on signatures for insert with check (has_site_role(site_id, array['dev','con','rep','wm','sm','so']));
 revoke all on signatures from anon;
 grant select, insert on signatures to authenticated;
@@ -35,5 +40,6 @@ begin
   new.created_at := now();
   return new;
 end $$;
+drop trigger if exists signatures_stamp on signatures;
 create trigger signatures_stamp before insert on signatures for each row execute function signature_stamp();
 revoke execute on function signature_stamp() from public, anon, authenticated;

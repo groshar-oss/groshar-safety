@@ -1,0 +1,20 @@
+# בדיקות אוטומטיות על כל PR ועל כל דחיפה ל-main: תחביר כל קובצי ה-JavaScript ובדיקת התקנה.
+name: בדיקות
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: תחביר
+        run: node tests/check-syntax.mjs
+      - name: בדיקות יחידה
+        run: node tests/unit.mjs
