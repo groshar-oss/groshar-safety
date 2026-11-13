@@ -1,7 +1,7 @@
 // חתימה במערכת על כתב ההסמכה: מבצע הבנייה והנציג חותמים באצבע. החתימה נשמרת עם נוסח המסמך וטביעת האצבע שלו.
 // חתימה תקפה רק על הנוסח הנוכחי: אם פרטי האתר או הנציג השתנו אחרי החתימה, צריך לחתום מחדש.
 import { db } from '../db.js';
-import { S, hasRole, siteOrgs, syncSite, render } from '../app.js';
+import { S, hasRole, siteOrgs, syncSite, render, conNames } from '../app.js';
 import { authLetterBody, authLetter } from './docs.js';
 import { esc, h, $, $$, toast } from '../util.js';
 
@@ -34,7 +34,7 @@ export function pad(canvas) {
 
 export async function openAuthSign(site, person) {
   const { body, hash, cur, stale } = await authSigs(site, person);
-  const conName = siteOrgs(site.id, 'contractor').map(o => o.name).join(', ');
+  const conName = conNames(site.id).join(', ');
   const conPerson = S.data.site_people.find(p => p.site_id === site.id && p.role === 'con' && p.active !== false && !p.backup);
   const can = { executor: hasRole(site.id, 'con'), rep: hasRole(site.id, 'con', 'rep') };
   const slotHtml = (k, label, name, title) => cur[k]

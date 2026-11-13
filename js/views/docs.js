@@ -1,5 +1,5 @@
 // מסמכים להדפסה: כתב הסמכה לנציג מבצע הבנייה, ושלט אתר לפי תקנה 7
-import { S, siteOrgs } from '../app.js';
+import { S, siteOrgs, conNames } from '../app.js';
 import { derive, ACTIVITIES, CAT, ROLES, LAW } from '../duties.js';
 import { esc, fmtDate } from '../util.js';
 
@@ -45,7 +45,7 @@ export function wmDutiesFor(site) {
 
 // נוסח כתב ההסמכה (בלי חתימות). זה הנוסח שנחתם, וממנו מחושבת טביעת האצבע
 export function authLetterBody(site, person) {
-  const con = siteOrgs(site.id, 'contractor').map(o => o.name).join(', ') || '________________';
+  const con = conNames(site.id).join(', ') || '________________';
   const backups = S.data.site_people.filter(p => p.site_id === site.id && p.role === 'rep' && p.backup && p.active !== false && p.id !== person.id);
   const rows = wmDutiesFor(site).map(([a, b]) => `<tr><td>${esc(a)}</td><td>${esc(b)}</td></tr>`).join('');
   return `<h2>הצדדים והאתר</h2>
@@ -92,7 +92,8 @@ export function siteSign(site) {
   const missing = [];
   const rows = [];
   const add = (label, value, required = true) => { if (value) rows.push(`<tr><th>${label}</th><td>${value}</td></tr>`); else if (required) missing.push(label); };
-  add('מבצע הבנייה', con.map(o => esc(o.name)).join(', '));
+  // מבצע הבנייה: הארגון שמשויך לאתר, ואם לא שויך ארגון, בעל התפקיד "מבצע הבנייה" מלשונית בעלי התפקידים
+  add('מבצע הבנייה', con.length ? con.map(o => esc(o.name)).join(', ') : P('con').map(p => who(p)).join(', '));
   if (wm) add('מנהל העבודה', who(wm, wm.license));
   else if (d.exempt27) add('אחראי מטעם מבצע הבנייה', rep ? who(rep) + '<div style="font-size:14px;font-weight:400;color:#68717D">אין חובת מינוי מנהל עבודה (תקנה 2(ז))</div>' : '');
   else add('מנהל העבודה', '');

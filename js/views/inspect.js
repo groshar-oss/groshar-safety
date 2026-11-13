@@ -1,7 +1,7 @@
 // ביקורת באתר: מסך אחד שמרכז את כל מה שמבקר רוצה לראות, הודעה לבעלי התפקידים (WhatsApp / מייל) וייצוא PDF
 import { defectsOf, SEV, isLate } from './defects.js';
 import { db } from '../db.js';
-import { S, hasRole, siteOrgs, render } from '../app.js';
+import { S, hasRole, siteOrgs, render, conNames } from '../app.js';
 import { derive, ROLES, WORK_TYPES, EVENTS, LEVELS, gateStatus } from '../duties.js';
 import { exceptions, waLink, mailtoLink, appUrl } from '../alerts.js';
 import { gReady, gmailSend } from '../google.js';
@@ -29,7 +29,7 @@ function sections(s) {
     ['האתר', s.name + (s.address ? ', ' + s.address : '')],
     ['מהות העבודה', WORK_TYPES[s.profile?.work_type] || '—'],
     ['יזם (המזמין)', siteOrgs(s.id, 'developer').map(o => o.name).join(', ') || '—'],
-    ['מבצע הבנייה (קבלן ראשי)', siteOrgs(s.id, 'contractor').map(o => o.name).join(', ') || '—'],
+    ['מבצע הבנייה (קבלן ראשי)', conNames(s.id).join(', ') || '—'],
     ['סטטוס', statusName(s.status)],
     ['היתר', s.profile?.permit_no || '—'],
     ['שטח לפי ההיתר', (+s.profile?.area || 0).toLocaleString('he-IL') + ' מ"ר'],

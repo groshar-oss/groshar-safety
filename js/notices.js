@@ -3,7 +3,7 @@
 // email = מייל לבעלי התפקידים, נשלח מ-Gmail המחובר אחרי האישור
 // letter = מכתב רשמי להדפסה וחתימה
 import { db } from './db.js';
-import { S, siteOrgs } from './app.js';
+import { S, siteOrgs, conNames } from './app.js';
 import { derive, ROLES, LAW } from './duties.js';
 import { fmtDate } from './util.js';
 
@@ -24,6 +24,7 @@ const WT = { new: 'בנייה חדשה', addition: 'תוספת בנייה', fito
 const dt = t => t ? new Date(t).toLocaleString('he-IL', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' }) : '';
 const people = (site, ...roles) => S.data.site_people.filter(p => p.site_id === site.id && roles.includes(p.role) && p.active !== false && !p.backup);
 const personLine = p => p ? [p.name, p.license && 'רישום ' + p.license, p.phone, p.email, p.from_date && 'מ-' + fmtDate(p.from_date)].filter(Boolean).join(' · ') : '';
+const conLine = id => siteOrgs(id, 'contractor').map(orgLine).join('; ') || conNames(id).join('; ');
 const orgLine = o => [o.name, o.reg_no && 'ח"פ ' + o.reg_no, o.contractor_reg && 'קבלן רשום ' + o.contractor_reg].filter(Boolean).join(' · ');
 const eventOf = duty => duty.event_id ? S.data.events.find(e => e.id === duty.event_id) : null;
 
@@ -36,7 +37,7 @@ function siteFields(site) {
     ['מועד תחילת העבודה', fmtDate(p.start_date) || ''], ['משך צפוי (שבועות)', p.duration_weeks ? String(p.duration_weeks) : ''],
     ['מספר עובדים מרבי בו-זמנית', p.workers_max ? String(p.workers_max) : ''],
     ['המזמין (יזם)', siteOrgs(site.id, 'developer').map(orgLine).join('; ')],
-    ['מבצע הבנייה', siteOrgs(site.id, 'contractor').map(orgLine).join('; ')]
+    ['מבצע הבנייה', conLine(site.id)]
   ];
   if (!d.exempt27 || people(site, 'wm').length) f.push(['מנהל העבודה', personLine(people(site, 'wm')[0])]);
   if (d.siteMgr) f.push(['מנהל האתר', personLine(people(site, 'sm')[0])]);
@@ -58,11 +59,11 @@ export const NOTICES = {
   con_notice_end: { channel: 'gov', gov: 'site', build: (site, duty) => ({ fields: [['סוג ההודעה', 'סיום עבודות הבנייה'], ['מועד סיום העבודה', fmtDate(eventOf(duty)?.occurred_at || new Date().toISOString())], ...siteFields(site)] }) },
   accident_notice: { channel: 'gov', gov: 'accident', build: (site, duty) => { const e = eventOf(duty);
     const a = (S.data.accident_reports || []).find(r => r.event_id === e?.id);
-    return { fields: [['מקום התאונה', [site.name, site.address, a?.place].filter(Boolean).join(', ')], ['המעסיק', siteOrgs(site.id, 'contractor').map(orgLine).join('; ')],
+    return { fields: [['מקום התאונה', [site.name, site.address, a?.place].filter(Boolean).join(', ')], ['המעסיק', conLine(site.id)],
       ['מועד התאונה', dt(a?.occurred_at || e?.occurred_at)], ['תיאור התאונה', a?.how || e?.description || ''], ['פרטי הנפגע (שם, ת"ז, תפקיד)', a ? [a.injured_name, a.injured_id].filter(Boolean).join(', ') : ''],
       ['חומרת הפגיעה', a ? [a.injury, a.evac ? 'פונה אל ' + a.evac : ''].filter(Boolean).join('. ') : '']] }; } },
   so_stop_notice: { channel: 'gov', gov: 'safety', build: (site, duty) => { const e = eventOf(duty);
-    return { fields: [['האתר', [site.name, site.address].filter(Boolean).join(', ')], ['מבצע הבנייה', siteOrgs(site.id, 'contractor').map(orgLine).join('; ')],
+    return { fields: [['האתר', [site.name, site.address].filter(Boolean).join(', ')], ['מבצע הבנייה', conLine(site.id)],
       ['הממונה על הבטיחות', personLine(people(site, 'so')[0])], ['מועד הפסקת העבודה', dt(e?.occurred_at)], ['הסיבה להפסקה', e?.description || '']] }; } },
 
   dev_bakar: { channel: 'email', to: ['con'], build: site => { const b = people(site, 'bakar')[0];

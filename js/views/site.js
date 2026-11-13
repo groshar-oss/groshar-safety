@@ -1,6 +1,6 @@
 // מסך אתר: סקירה, חובות, אירועים, בעלי תפקידים, יומן ביקורת
 import { db } from '../db.js';
-import { S, siteById, myRoles, hasRole, canEditSite, siteOrgs, render, sideOf } from '../app.js';
+import { S, siteById, myRoles, hasRole, canEditSite, siteOrgs, render, sideOf, conNames } from '../app.js';
 import { derive, profileNotes, gateStatus, ROLES, ASSIGNABLE, EVENTS, CAT, LEVELS, level, WORK_TYPES } from '../duties.js';
 import { exceptions } from '../alerts.js';
 import { esc, h, $, $$, toast, modal, field, select, area, fmtDate } from '../util.js';
@@ -49,7 +49,7 @@ function tabOverview(s) {
   const people = S.data.site_people.filter(p => p.site_id === s.id && p.active !== false && !p.backup);
   const who = r => people.filter(p => p.role === r).map(p => esc(p.name)).join(', ');
   const devs = siteOrgs(s.id, 'developer').map(o => esc(o.name)).join(', ');
-  const cons = siteOrgs(s.id, 'contractor').map(o => esc(o.name)).join(', ');
+  const cons = conNames(s.id).map(esc).join(', ');
   const el = h(`<div>
     ${dv.clientDuties && !people.some(p => p.role === 'bakar') ? `<div class="banner crit">⛔ אין בקר בטיחות ממונה. כל עוד לא מונה, חובות הבקר חלות על היזם (תקנה 1א(ב)).<div class="actions"><a class="btn small" href="#/site/${s.id}/people">רישום בקר בטיחות</a></div></div>` : ''}
     ${wmBanner(s)}
@@ -289,7 +289,7 @@ async function logPages(s) {
   const win = window.open('', '_blank');
   try {
     const rows = logItems(s).filter(x => x.at && String(x.at).slice(0, 10) >= v.from && String(x.at).slice(0, 10) <= v.to).reverse();
-    const con = siteOrgs(s.id, 'contractor').map(o => o.name).join(', ');
+    const con = conNames(s.id).join(', ');
     const blocks = [
       { type: 'title', text: 'רישומים לצירוף לפנקס הכללי', brand: 'צי הנדסה', sub: `${s.name}${s.address ? ', ' + s.address : ''} · ${fmtDate(v.from)} עד ${fmtDate(v.to)}` },
       { type: 'kv', rows: [['מבצע הבנייה', con || '—'], ['מספר רישומים', String(rows.length)]] },

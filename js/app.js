@@ -94,6 +94,8 @@ export async function syncSite(site, reload = true) {
 export const siteById = id => S.data.sites.find(s => s.id === id);
 export const visibleSites = () => S.data.sites.filter(s => isAdmin() || myRoles(s.id).length);
 export const orgName = id => S.data.orgs.find(o => o.id === id)?.name || '';
+// שמות מבצע הבנייה לתצוגה ולמסמכים: הארגון שמשויך לאתר, ואם לא שויך ארגון, בעל התפקיד "מבצע הבנייה" מלשונית בעלי התפקידים
+export const conNames = siteId => { const o = siteOrgs(siteId, 'contractor').map(x => x.name); return o.length ? o : S.data.site_people.filter(p => p.site_id === siteId && p.role === 'con' && p.active !== false && !p.backup).map(p => p.name); };
 export const siteOrgs = (siteId, kind) => S.data.site_orgs.filter(x => x.site_id === siteId && (!kind || x.kind === kind)).map(x => S.data.orgs.find(o => o.id === x.org_id)).filter(Boolean);
 
 // מסך השטח זמין למי שיש לו תפקיד שטח באתר כלשהו (או מנהל השירות)

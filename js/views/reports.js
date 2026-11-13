@@ -1,6 +1,6 @@
 // דוחות בטלפון: דוח ביקור בקר בטיחות, ותיעוד תאונה עם הצהרות עדים חתומות
 import { db, uuid } from '../db.js';
-import { S, hasRole, siteById, siteOrgs, syncSite, render } from '../app.js';
+import { S, hasRole, siteById, siteOrgs, syncSite, render, conNames } from '../app.js';
 import { esc, h, $, $$, toast, modal, field, select, area, fmtDate, fileField } from '../util.js';
 import { shrinkImage, renderPdfPages, pagesToPdf, loadImg, workersOf } from '../workers.js';
 import { reportEvent, fmtDT, openFile } from './common.js';
@@ -36,7 +36,7 @@ export async function bakarReportForm(duty) {
   const s = siteById(duty.site_id);
   const ev = S.data.events.find(e => e.id === duty.event_id);
   const me = person(s, 'bakar');
-  const cons = siteOrgs(s.id, 'contractor').map(o => o.name);
+  const cons = conNames(s.id);
   let form = null, n = 1;
   const v = await modal({ title: 'דוח ביקור בקר בטיחות', ok: 'שמירה והפקת הדוח', wide: true,
     body: `<div class="grid g2">${field('מועד הביקור', 'visit_at', isoLocal(ev?.occurred_at), { type: 'datetime-local', req: true })}${select('שלב', 'stage', STAGES, 'periodic')}</div>
@@ -105,7 +105,7 @@ export async function bakarPdf(s, r) {
   const blocks = [
     { type: 'title', text: 'דוח ביקור בקר בטיחות', brand: 'צי הנדסה', sub: 'לפי תקנה 2א(ב)(3) לתקנות הבטיחות בעבודה (עבודות בנייה), התשמ"ח-1988' },
     { type: 'kv', rows: [['האתר', s.name + (s.address ? ', ' + s.address : '')], ['היזם', siteOrgs(s.id, 'developer').map(o => o.name).join(', ') || '—'],
-      ['מבצע הבנייה', siteOrgs(s.id, 'contractor').map(o => o.name).join(', ') || '—'], ['מועד הביקור', fmtDT(r.visit_at)], ['שלב', STAGES[r.stage] || r.stage], ['בקר הבטיחות', r.bakar_name]] },
+      ['מבצע הבנייה', conNames(s.id).join(', ') || '—'], ['מועד הביקור', fmtDT(r.visit_at)], ['שלב', STAGES[r.stage] || r.stage], ['בקר הבטיחות', r.bakar_name]] },
     ...(r.summary ? [{ type: 'p', text: 'מה נבדק: ' + r.summary }] : []),
     { type: 'table', cols: [{ h: '#', w: 0.05 }, { h: 'ממצא', w: 0.37 }, { h: 'איפה', w: 0.14 }, { h: 'אחראי', w: 0.14 }, { h: 'סיכון לא קביל', w: 0.1 }, { h: 'צילום', w: 0.2 }],
       rows: (r.findings || []).map((f, i) => [String(i + 1), f.text, f.location || '', f.responsible || '', f.unacceptable ? 'כן' : '', imgs[i] ? { img: imgs[i] } : '']) },
@@ -214,7 +214,7 @@ export async function accidentPdf(s, r) {
   const sigs = await Promise.all((r.witnesses || []).map(w => loadImg(w.image)));
   const blocks = [
     { type: 'title', text: 'תיעוד תאונת עבודה', brand: 'צי הנדסה', sub: s.name + (s.address ? ', ' + s.address : '') },
-    { type: 'kv', rows: [['מבצע הבנייה', siteOrgs(s.id, 'contractor').map(o => o.name).join(', ') || '—'], ['הנפגע', r.injured_name + (r.injured_id ? ' · ' + r.injured_id : '')], ['מועד התאונה', fmtDT(r.occurred_at)],
+    { type: 'kv', rows: [['מבצע הבנייה', conNames(s.id).join(', ') || '—'], ['הנפגע', r.injured_name + (r.injured_id ? ' · ' + r.injured_id : '')], ['מועד התאונה', fmtDT(r.occurred_at)],
       ['מקום', r.place], ['איך קרתה', r.how], ['הפגיעה', r.injury || '—'], ['פונה אל', r.evac || '—'], ['עזרה ראשונה', r.first_aid || '—']] },
     ...(photos.some(Boolean) ? [{ type: 'table', cols: photos.filter(Boolean).map((_, i) => ({ h: 'צילום ' + (i + 1), w: 1 / photos.filter(Boolean).length })), rows: [photos.filter(Boolean).map(img => ({ img }))] }] : []),
     { type: 'table', cols: [{ h: 'עד', w: 0.18 }, { h: 'הצהרה', w: 0.5 }, { h: 'חתימה', w: 0.17 }, { h: 'מועד', w: 0.15 }],
